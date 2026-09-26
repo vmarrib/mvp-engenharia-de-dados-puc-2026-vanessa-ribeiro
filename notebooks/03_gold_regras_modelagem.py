@@ -71,6 +71,11 @@ dim_regra = (spark.createDataFrame(REGRAS, """id_regra string, descricao string,
              .withColumn("referencia", F.create_map(
                  *[x for k, v in REFERENCIAS.items() for x in (F.lit(k), F.lit(v))])[F.col("categoria_owasp")])
              .withColumn("escopo_saude", F.col("id_regra").isin("R15", "R16", "R17", "R18"))
+             # R08 e R16 disparam em massa porque o Supabase concede GRANT amplo a anon e
+             # authenticated POR DESIGN - a protecao fica no RLS, nao no grant. Sem marcar
+             # isso, 343 achados de arquitetura abafam os 8 que sao defeito real da aplicacao.
+             # A flag permite calcular um score ajustado sem descartar o achado.
+             .withColumn("esperado_por_design", F.col("id_regra").isin("R08", "R16"))
              .withColumn("sk_regra", F.monotonically_increasing_id()))
 
 dim_regra.write.mode("overwrite").option("overwriteSchema", "true").saveAsTable(f"{GOLD}.dim_regra")
@@ -294,6 +299,10 @@ SELECT row_number() OVER (ORDER BY a.id_regra, a.schema_nome, a.objeto) AS sk_ac
        r.peso * CASE WHEN c.is_dado_sensivel THEN 3
                      WHEN c.is_dado_pessoal  THEN 2
                      ELSE 1 END                        AS score_risco,
+       CASE WHEN r.esperado_por_design THEN 0
+            ELSE r.peso * CASE WHEN c.is_dado_sensivel THEN 3
+                               WHEN c.is_dado_pessoal  THEN 2
+                               ELSE 1 END END            AS score_ajustado,
        COALESCE(c.is_dado_pessoal,  false)             AS envolve_dado_pessoal,
        COALESCE(c.is_dado_saude,    false)             AS envolve_dado_saude,
        COALESCE(c.is_dado_sensivel, false)             AS envolve_dado_sensivel,
@@ -317,8 +326,9 @@ print(f"fato_achado: {spark.table(f'{GOLD}.fato_achado').count()} linhas")
 # COMMAND ----------
 
 spark.sql(f"""CREATE OR REPLACE TABLE {GOLD}.backlog_remediacao AS
-SELECT row_number() OVER (ORDER BY f.score_risco DESC, r.id_regra) AS prioridade,
+SELECT row_number() OVER (ORDER BY f.score_ajustado DESC, f.score_risco DESC, r.id_regra) AS prioridade,
        r.id_regra, r.severidade, r.categoria_owasp, r.descricao AS regra, r.escopo_saude,
+       r.esperado_por_design, f.score_ajustado,
        o.schema_anon, o.objeto_anon, o.tipo_objeto, o.dominio,
        c.coluna_anon, c.classe_dado,
        f.score_risco, f.envolve_dado_saude, f.envolve_dado_sensivel, f.detalhe
@@ -332,6 +342,7 @@ SELECT o.schema_anon, o.dominio,
        count(DISTINCT o.sk_objeto)                                           AS n_objetos,
        count(f.sk_achado)                                                    AS n_achados,
        coalesce(sum(f.score_risco), 0)                                       AS score_total,
+       coalesce(sum(f.score_ajustado), 0)                                    AS score_ajustado,
        round(coalesce(sum(f.score_risco), 0)
              / nullif(count(DISTINCT o.sk_objeto), 0), 2)                    AS score_por_objeto,
        sum(CASE WHEN r.severidade = 'Critico' THEN 1 ELSE 0 END)             AS n_criticos,
@@ -401,6 +412,8 @@ DOC_COLUNA = {
  ("dim_regra", "peso"): "Peso da severidade. Dominio: 10, 6, 3, 1.",
  ("dim_regra", "categoria_owasp"): "Categoria do OWASP Top 10:2025. Dominio: A01, A02, A03, A06, A08.",
  ("dim_regra", "escopo_saude"): "True nas regras R15 a R18, especificas de dado de saude.",
+ ("dim_regra", "esperado_por_design"): "True em R08 e R16. O Supabase concede privilegio amplo a anon e authenticated por padrao e delega a protecao ao RLS; esses achados descrevem a arquitetura da plataforma, nao um defeito introduzido pela aplicacao.",
+ ("fato_achado", "score_ajustado"): "Score desconsiderando os achados esperados por design (R08, R16). Separa risco introduzido pela aplicacao de caracteristica da plataforma. Faixa 0 a 30.",
  ("dim_objeto", "exposto_api"): "True quando o schema e exposto via PostgREST. Padrao Supabase: apenas public.",
  ("dim_objeto", "rls_habilitado"): "Estado do Row Level Security. Origem: pg_class.relrowsecurity.",
  ("dim_objeto", "dominio"): "Dominio: aplicacao, gerenciado_supabase.",
