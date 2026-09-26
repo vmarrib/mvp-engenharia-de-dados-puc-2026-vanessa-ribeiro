@@ -20,6 +20,7 @@ notebooks/01_bronze_ingestao.py         CSV → Delta, sem transformação
 notebooks/02_silver_qualidade.py        perfil de qualidade, tipagem, classificação LGPD
 notebooks/03_gold_regras_modelagem.py   18 regras + esquema estrela + catálogo
 notebooks/04_analise_perguntas.sql      as 8 perguntas de negócio
+notebooks/05_visualizacoes.py           painel de indicadores + 4 figuras
 docs/governanca_anonimizacao.md         decisões de privacidade do próprio trabalho
 docs/catalogo_de_dados.md               catálogo de dados transcrito
 ```
@@ -185,7 +186,7 @@ Transcrito em [`docs/catalogo_de_dados.md`](docs/catalogo_de_dados.md) e aplicad
 
 ## Pipeline de Dados (Etapa 4.4)
 
-Ramificado em **quatro notebooks**, um por responsabilidade — não em um notebook único, para
+Ramificado em **cinco notebooks**, um por responsabilidade — não em um notebook único, para
 que cada etapa possa ser reexecutada isoladamente quando algo precisa de ajuste.
 
 | Notebook | Responsabilidade | Entrada → Saída |
@@ -194,6 +195,7 @@ que cada etapa possa ser reexecutada isoladamente quando algo precisa de ajuste.
 | `02_silver_qualidade.py` | Perfil de qualidade, padronização, classificação LGPD | Bronze → 10 tabelas Silver |
 | `03_gold_regras_modelagem.py` | Motor de 18 regras, estrela, catálogo | Silver → 11 tabelas Gold |
 | `04_analise_perguntas.sql` | As 8 perguntas | Gold → resultados |
+| `05_visualizacoes.py` | Figuras do relatório | Gold → PNGs no Volume `pitaia_gold.figuras` |
 
 ### Transformações principais
 
