@@ -403,8 +403,12 @@ DOC_TABELA = {
  "mapa_exposicao_lgpd": "Para cada classe de dado pessoal, quantas colunas estao protegidas por RLS e quantas expostas. Medida de conformidade.",
  "isolamento_prontuario": "Uma linha por tabela que contem dado de saude, com o estado do isolamento entre pacientes. aberta_a_autenticados=1 indica que qualquer usuario logado alcanca o dado.",
 }
+def sql_txt(t):
+    """Aspa simples no texto quebra o literal SQL. Dobrar e o escape."""
+    return t.replace("'", "''")
+
 for t, doc in DOC_TABELA.items():
-    spark.sql(f"COMMENT ON TABLE {GOLD}.{t} IS '{doc}'")
+    spark.sql(f"COMMENT ON TABLE {GOLD}.{t} IS '{sql_txt(doc)}'")
 
 DOC_COLUNA = {
  ("dim_regra", "id_regra"): "Chave natural da regra. Dominio: R01 a R18.",
@@ -429,6 +433,6 @@ DOC_COLUNA = {
  ("isolamento_prontuario", "aberta_a_autenticados"): "1 quando existe politica para authenticated sem filtro por usuario ou tenant. Faixa: 0 ou 1.",
 }
 for (t, c), doc in DOC_COLUNA.items():
-    spark.sql(f"ALTER TABLE {GOLD}.{t} ALTER COLUMN {c} COMMENT '{doc}'")
+    spark.sql(f"ALTER TABLE {GOLD}.{t} ALTER COLUMN {c} COMMENT '{sql_txt(doc)}'")
 
 print("Catalogo aplicado. Screenshot do Catalog Explorer e da aba Lineage.")

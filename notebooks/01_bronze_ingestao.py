@@ -109,8 +109,12 @@ COMENTARIOS = {
  "constraints": "Um registro por constraint de PK, UNIQUE ou FK. Fonte: information_schema.table_constraints.",
 }
 
+def sql_txt(t):
+    """Aspa simples dentro do texto quebra o literal SQL. Dobrar e o escape do Postgres/Spark."""
+    return t.replace("'", "''")
+
 for tabela, txt in COMENTARIOS.items():
-    spark.sql(f"COMMENT ON TABLE {CATALOGO}.{SCH_BRONZE}.{tabela} IS '{txt}'")
+    spark.sql(f"COMMENT ON TABLE {CATALOGO}.{SCH_BRONZE}.{tabela} IS '{sql_txt(txt)}'")
 
 for tabela in FONTES:
     t = f"{CATALOGO}.{SCH_BRONZE}.{tabela}"

@@ -26,10 +26,14 @@ spark.sql(f"CREATE SCHEMA IF NOT EXISTS {SILVER} COMMENT "
 def bronze(t):
     return spark.table(f"{BRONZE}.{t}")
 
+def sql_txt(t):
+    """Aspa simples no texto quebra o literal SQL. Dobrar e o escape."""
+    return t.replace("'", "''")
+
 def salvar(df, nome, doc):
     alvo = f"{SILVER}.{nome}"
     df.write.mode("overwrite").option("overwriteSchema", "true").saveAsTable(alvo)
-    spark.sql(f"COMMENT ON TABLE {alvo} IS '{doc}'")
+    spark.sql(f"COMMENT ON TABLE {alvo} IS '{sql_txt(doc)}'")
     print(f"{alvo:46s} {spark.table(alvo).count():6d}")
     return spark.table(alvo)
 
