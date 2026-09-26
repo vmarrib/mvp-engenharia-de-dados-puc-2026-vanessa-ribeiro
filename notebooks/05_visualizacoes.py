@@ -226,13 +226,19 @@ plt.show()
 # COMMAND ----------
 
 df = spark.sql(f"""
-SELECT prioridade, id_regra, severidade, objeto_anon, coluna_anon, score_risco
+SELECT prioridade, id_regra, severidade, objeto_anon, coluna_anon, detalhe, score_risco
 FROM {GOLD}.backlog_remediacao
 ORDER BY prioridade LIMIT 15
 """).toPandas().iloc[::-1]
 
-rotulos = [f"{p:>2}. {r} · {o}" + (f" · {c}" if c else "")
-           for p, r, o, c in zip(df.prioridade, df.id_regra, df.objeto_anon, df.coluna_anon)]
+# funcoes e buckets nao sao tabelas, entao nao tem objeto_anon - uso o detalhe curto
+def alvo(o, c, d):
+    if o:  return o + (f" · {c}" if c else "")
+    return (d or "")[:34]
+
+rotulos = [f"{p:>2}. {r} · {alvo(o, c, d)}"
+           for p, r, o, c, d in zip(df.prioridade, df.id_regra, df.objeto_anon,
+                                    df.coluna_anon, df.detalhe)]
 
 fig, ax = plt.subplots(figsize=(10, 0.45 * len(df) + 1.8))
 ax.barh(rotulos, df.score_risco, height=0.6,

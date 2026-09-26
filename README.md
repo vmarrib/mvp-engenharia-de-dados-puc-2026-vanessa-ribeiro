@@ -126,8 +126,36 @@ Detalhamento em [`docs/governanca_anonimizacao.md`](docs/governanca_anonimizacao
 
 ## Carga dos Dados (Etapa 4.2)
 
-`PREENCHER — descreva o caminho: SQL Editor do Supabase → export CSV → upload no Volume do
-Unity Catalog → notebook 01. Justifique por que não usei conexão JDBC direta.`
+A coleta foi feita em duas etapas, e a segunda existiu por um defeito que só apareceu quando
+os dados chegaram ao Databricks.
+
+**Extração.** As oito consultas de `extracao/00_queries_supabase.sql` foram executadas no SQL
+Editor do painel do Supabase, uma por vez, e cada resultado exportado em CSV. Optei
+deliberadamente por esse caminho em vez de uma conexão JDBC direta ou de um *foreign catalog*
+via Lakehouse Federation. A razão é simples: nenhuma credencial precisa sair do Supabase.
+Numa aplicação de saúde em produção cujo código vai para um repositório público, a
+possibilidade de uma connection string ser versionada por acidente é um risco maior do que o
+ganho de automatizar uma coleta que roda uma vez. O custo assumido é que a coleta não é
+agendável, e isso está registrado em trabalhos futuros.
+
+**Correção durante a coleta.** As três primeiras versões das consultas de colunas, grants e
+constraints usavam `information_schema`. Os arquivos chegaram plausíveis — a de grants trouxe
+164 linhas bem formadas — mas incompletos: as views do `information_schema` são **filtradas
+por privilégio** e retornam apenas o que a role de execução enxerga. No SQL Editor isso
+significou a ACL de uma única role de sandbox em vez das 5.707 linhas reais, o que zeraria em
+silêncio as regras de privilégio anônimo. As versões finais leem `pg_attribute`,
+`aclexplode(pg_class.relacl)` e `pg_constraint`, que não sofrem esse filtro. Registro porque
+é uma armadilha de coleta que não se anuncia: a consulta funciona, devolve dados verossímeis
+e produz uma conclusão errada.
+
+**Carga.** Os oito CSVs foram enviados para o Volume `workspace.bronze.raw` do Unity Catalog
+pela interface do Catalog Explorer, e lidos pelo notebook
+[`01_bronze_ingestao.py`](notebooks/01_bronze_ingestao.py), que grava as oito tabelas Delta da
+camada Bronze. Duas restrições do ambiente governado apareceram nessa etapa: `input_file_name()`
+é bloqueada pelo Unity Catalog, porque expor caminho físico de arquivo contorna a camada de
+governança — a alternativa suportada é a coluna oculta `_metadata.file_path`; e aspas simples
+dentro do texto de um `COMMENT` quebram o literal SQL, o que exigiu escape explícito. Nenhuma
+das duas aparece rodando Spark fora de um catálogo.
 
 **Scripts:** [`extracao/00_queries_supabase.sql`](extracao/00_queries_supabase.sql) ·
 [`notebooks/01_bronze_ingestao.py`](notebooks/01_bronze_ingestao.py)
@@ -498,28 +526,80 @@ concede por padrão. Sem o grupo de comparação, qualquer número absoluto seri
 ## Autoavaliação
 
 ### O que foi atingido
-`PREENCHER`
 
-### O que não foi atingido e por quê
-`PREENCHER — candidatos honestos: snapshot único impediu análise de evolução da postura;
-a coleta não foi automatizada por decisão de não expor credencial; a classificação LGPD é
-heurística de nome, não de conteúdo; a análise prova o que o banco permite, não o que a
-aplicação expõe.`
+O ciclo completo do pipeline funcionou de ponta a ponta: oito fontes coletadas, três camadas
+medalhão persistidas em Delta, esquema estrela com seis dimensões e uma fato de 579 registros,
+catálogo documentado no Unity Catalog e as oito perguntas de negócio respondidas com dado.
+
+Mais do que o pipeline, o objetivo declarado era transformar o catálogo de um banco em um
+**backlog priorizado**, e isso foi alcançado: a `gold.backlog_remediacao` entrega uma ordem de
+correção acionável, com os quatro achados de escalada de privilégio no topo. As duas perguntas
+que mais importavam — quantas colunas de dado de saúde estão desprotegidas (P7) e se um
+paciente alcança o prontuário de outro (P8) — foram respondidas de forma conclusiva.
+
+### O que não foi atingido, e por quê
+
+**Snapshot único.** A `dim_tempo` existe com uma linha só. Toda a arquitetura suporta série
+histórica, mas não há histórico: não consigo afirmar se a postura melhorou ou piorou, apenas
+descrevê-la num instante. Era a análise mais interessante disponível e ficou de fora por
+tempo.
+
+**A análise prova o que o banco permite, não o que a aplicação expõe.** As duas tabelas
+apontadas na P8 podem estar protegidas por filtro no front-end. Não testei — isso exigiria
+emitir JWTs de dois pacientes distintos e comparar o retorno. A análise estática mostra a
+possibilidade, não o exercício dela. Por outro lado, é precisamente essa a razão de existir do
+RLS: confiar no filtro da interface é o que o princípio de mediação completa proíbe.
+
+**Classificação por nomenclatura, não por conteúdo.** O classificador lê nomes de tabela e de
+coluna. Mediu-se precisão de `PREENCHER`% e recall de `PREENCHER`% numa amostra de 40 colunas
+rotuladas manualmente, e os erros seguem um padrão sistemático nas bordas — colunas de
+controle dentro de tabelas clínicas herdam classificação indevida, e texto livre em tabelas de
+nome neutro escapa. Uma classificação por amostragem de conteúdo seria mais precisa e é um
+projeto em si.
+
+**Coleta não automatizada.** Decisão consciente, explicada na seção de Carga, mas ainda assim
+uma limitação: o pipeline não roda sozinho amanhã.
 
 ### Dificuldades encontradas
-`PREENCHER`
+
+A maior não foi técnica, foi de escopo. O tema deste MVP mudou três vezes antes de
+estabilizar, e as duas primeiras ideias falhavam pelo mesmo motivo: eu partia de um dado
+interessante em vez de partir de uma pergunta. Quando o ponto de partida virou *"o que eu
+preciso decidir?"*, o resto — fonte, modelo, análise — se ordenou sozinho. É exatamente o que
+o enunciado adverte na etapa de objetivo, e eu precisei errar duas vezes para entender.
+
+Tecnicamente, três problemas tomaram tempo real. O mais instrutivo foi o do
+`information_schema`: uma consulta correta em sintaxe, executada sem erro, devolvendo dados
+incompletos por causa de uma regra de visibilidade que eu não conhecia. Descobri porque as
+contagens não bateram entre a tela e o arquivo — sem essa conferência, teria concluído que a
+aplicação não tinha nenhum problema de privilégio anônimo.
+
+O segundo foi o dos *overloads*: o perfil de duplicatas acusou 30 repetições em `funcoes` e
+meu pipeline as descartava. Eram assinaturas distintas da mesma função, cada uma com suas
+próprias flags de segurança. A deduplicação ingênua poderia ter escondido uma função
+`SECURITY DEFINER` vulnerável — falso negativo numa regra crítica, que é o pior desfecho
+possível de uma auditoria, porque afirma uma segurança que não existe. Foi o momento em que
+**medir a qualidade dos dados corrigiu a modelagem**, e não o contrário.
+
+O terceiro foi menos dramático e igualmente útil: `input_file_name()` bloqueada pelo Unity
+Catalog e aspas simples quebrando `COMMENT`. Ambos são atritos que só existem dentro de um
+ambiente governado, e que não aparecem rodando Spark solto.
 
 ### Trabalhos futuros
-- **Lakehouse Federation** (foreign catalog PostgreSQL) substituindo a exportação manual,
-  com credencial em Databricks Secrets — habilita execução agendada e histórico de postura.
-- **Série temporal de snapshots** para medir a evolução após a remediação, transformando
-  `dim_tempo` de uma linha em um eixo de análise real.
-- **Classificação de dado de saúde por conteúdo** (amostragem + NER clínico) em vez de nome
-  de coluna, elevando precisão e recall.
+
+- **Lakehouse Federation** com *foreign catalog* PostgreSQL e credencial em Databricks
+  Secrets, substituindo a exportação manual e permitindo execução agendada.
+- **Série temporal de snapshots**, transformando `dim_tempo` de uma linha num eixo real e
+  permitindo medir a evolução da postura após a remediação.
 - **Teste ativo de isolamento**: emitir JWTs de dois pacientes distintos e confirmar
-  empiricamente o que a análise estática aponta.
-- **Regras de MCP** (tool poisoning, confused deputy, token passthrough) na `dim_regra`,
-  relevantes porque a plataforma expõe interface MCP.
+  empiricamente o que a P8 aponta estaticamente.
+- **Controle de agregação**, no sentido do modelo BMA de Anderson: medir quantos prontuários
+  distintos um mesmo perfil alcança em sequência. A P7 cobre exposição direta; agregação é a
+  dimensão que fica descoberta.
+- **Classificação de dado de saúde por conteúdo** (amostragem com NER clínico) em vez de
+  nomenclatura, elevando precisão e recall.
+- **Regras de MCP** na `dim_regra` — *tool poisoning*, *confused deputy*, *token passthrough* —
+  relevantes porque a plataforma expõe interface MCP e essa superfície não foi auditada.
 
 ---
 
