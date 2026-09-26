@@ -20,7 +20,7 @@
 
 # COMMAND ----------
 
-from pyspark.sql.functions import current_timestamp, lit, input_file_name
+from pyspark.sql.functions import current_timestamp, lit, col
 from datetime import date
 
 CATALOGO   = "workspace"          # ajuste se criou catalogo proprio
@@ -64,7 +64,9 @@ for tabela, arquivo in FONTES.items():
           .option("escape", '"')            # e virgulas dentro de aspas
           .option("inferSchema", False)     # Bronze = cru, tudo string
           .csv(f"{VOL}/{arquivo}")
-          .withColumn("_arquivo_origem", input_file_name())
+          # input_file_name() nao e suportado no Unity Catalog; a coluna oculta
+          # _metadata.file_path faz o mesmo papel de linhagem
+          .withColumn("_arquivo_origem", col("_metadata.file_path"))
           .withColumn("_fonte", lit(f"supabase_sql_editor::{arquivo}"))
           .withColumn("_snapshot", lit(SNAPSHOT))
           .withColumn("_ingerido_em", current_timestamp()))
