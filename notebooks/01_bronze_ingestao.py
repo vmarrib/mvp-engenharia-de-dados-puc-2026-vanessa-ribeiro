@@ -101,12 +101,12 @@ display(df_resumo.orderBy("tabela"))
 COMENTARIOS = {
  "objetos": "Um registro por objeto do banco (tabela, view, materializada). Traz o estado do Row Level Security e as reloptions. Fonte: pg_class + pg_namespace.",
  "politicas": "Um registro por politica de RLS. Coluna roles vem como array serializado com ';'. expressao_using e NULL em politicas que so definem WITH CHECK. Fonte: pg_policies.",
- "colunas": "Um registro por coluna de cada objeto. Base para a classificacao de dado pessoal (LGPD). Fonte: information_schema.columns.",
- "grants": "Um registro por combinacao role x objeto x privilegio. Maior volume da extracao. Fonte: information_schema.role_table_grants.",
+ "colunas": "Um registro por coluna de cada objeto. Base para a classificacao de dado pessoal e de saude (LGPD). Fonte: pg_attribute + pg_class. Nao usa information_schema.columns porque aquela view e filtrada por privilegio e devolve subconjunto silencioso.",
+ "grants": "Um registro por combinacao role x objeto x privilegio. Maior volume da extracao. Fonte: aclexplode(pg_class.relacl). Nao usa information_schema.role_table_grants porque aquela view so mostra grants da role corrente - na primeira extracao devolveu 164 linhas de uma unica role em vez de 5707.",
  "funcoes": "Um registro por funcao. Somente FLAGS (security_definer, config); o corpo da funcao NAO foi extraido por decisao de seguranca. Fonte: pg_proc.",
  "buckets": "Um registro por bucket do Supabase Storage. publico=true significa leitura anonima. Fonte: storage.buckets.",
  "extensoes": "Um registro por extensao instalada. Cadeia de suprimentos, OWASP A03:2025. Fonte: pg_extension.",
- "constraints": "Um registro por constraint de PK, UNIQUE ou FK. Fonte: information_schema.table_constraints.",
+ "constraints": "Um registro por constraint de PK, UNIQUE ou FK. Fonte: pg_constraint + pg_class, pelo mesmo motivo de filtro por privilegio.",
 }
 
 def sql_txt(t):
