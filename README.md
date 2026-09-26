@@ -62,14 +62,14 @@ com tempo limitado de desenvolvimento.*
 
 | # | Pergunta | Respondida? |
 |---|---|---|
-| **P1** | Que proporção das tabelas expostas via API está sem RLS? | `PREENCHER` |
-| **P2** | Quantas tabelas têm RLS habilitado mas **zero políticas** — protegidas na aparência, quebradas na prática? | `PREENCHER` |
-| **P3** | Das políticas existentes, quantas isolam de fato por usuário ou tenant? | `PREENCHER` |
-| **P4** | O que a role anônima consegue **escrever**? | `PREENCHER` |
-| **P5** | Onde o risco está concentrado — qual schema tem a pior densidade de achados? | `PREENCHER` |
-| **P6** | Como os achados se distribuem pelas categorias do OWASP Top 10:2025? | `PREENCHER` |
-| **P7** | **Quantas colunas com dado de saúde estão sem proteção de linha?** (conformidade LGPD art. 11) | `PREENCHER` |
-| **P8** | **Um usuário autenticado qualquer consegue ler o prontuário de outro paciente?** | `PREENCHER` |
+| **P1** | Que proporção das tabelas expostas via API está sem RLS? | ✅ Sim |
+| **P2** | Quantas tabelas têm RLS habilitado mas **zero políticas** — protegidas na aparência, quebradas na prática? | ✅ Sim |
+| **P3** | Das políticas existentes, quantas isolam de fato por usuário ou tenant? | ✅ Sim |
+| **P4** | O que a role anônima consegue **escrever**? | ✅ Sim |
+| **P5** | Onde o risco está concentrado — qual schema tem a pior densidade de achados? | ✅ Sim |
+| **P6** | Como os achados se distribuem pelas categorias do OWASP Top 10:2025? | ✅ Sim |
+| **P7** | **Quantas colunas com dado de saúde estão sem proteção de linha?** (conformidade LGPD art. 11) | ✅ Sim |
+| **P8** | **Um usuário autenticado qualquer consegue ler o prontuário de outro paciente?** | ✅ Sim |
 
 P7 e P8 são as perguntas-âncora: as duas que um titular de dados faria se pudesse.
 Conforme o enunciado, nenhuma pergunta foi removida — o que não foi respondido está
@@ -272,34 +272,226 @@ estimar precisão e recall. `PREENCHER — comente dois exemplos concretos de er
 traz, no markdown de cada célula, como ler o resultado e que frase escrever.`
 
 ### P1 — Proporção de tabelas expostas sem RLS
-`PREENCHER` · `SCREENSHOT`
+
+**Resultado: 0%.** As 70 tabelas do schema principal da aplicação expostas via PostgREST têm
+Row Level Security habilitado, sem exceção.
+
+Este é o resultado mais importante do trabalho, e é positivo. A falha mais comum e mais grave
+em projetos Supabase é a tabela esquecida sem RLS: como a chave anônima é pública por design
+— ela vive embutida no front-end —, uma tabela sem política não é "menos protegida", é
+aberta para qualquer pessoa que inspecione o bundle JavaScript. A ausência completa dessa
+falha indica que habilitar RLS foi tratado como padrão do projeto, não como exceção lembrada
+caso a caso. Reportar ausência de falha com número é tão válido quanto reportar falha, e é o
+que separa uma auditoria de uma lista de reclamações.
+
+`SCREENSHOT`
 
 ### P2 — RLS habilitado com zero políticas
-`PREENCHER` · `SCREENSHOT`
+
+**Resultado: 25 tabelas.**
+
+No PostgreSQL, RLS habilitado sem nenhuma política **nega todo acesso**. É o inverso exato da
+falha anterior: aqui o defeito é de disponibilidade, não de confidencialidade. A tabela passa
+em qualquer checklist que pergunte "RLS está ativo?" e, ao mesmo tempo, devolve zero linhas
+para todo mundo.
+
+Vale ler isso pelo princípio de *fail-safe defaults*, um dos oito princípios de projeto que
+Saltzer e Schroeder formularam em 1975: na dúvida, o sistema deve negar. O PostgreSQL falha
+do lado certo — quebra funcionalidade, não vaza dado. O custo provável dessas 25 tabelas é
+alguma funcionalidade do Pitaia que não responde e cuja causa ninguém associou ao RLS.
+
+`SCREENSHOT`
 
 ### P3 — Políticas com isolamento real
-`PREENCHER` · `SCREENSHOT`
+
+**Resultado: entre 88,6% e 100%, conforme a role e o comando.**
+
+| role | comando | políticas | com isolamento | % |
+|---|---|---|---|---|
+| authenticated | SELECT | 41 | 37 | 90,2 |
+| authenticated | ALL | 16 | 15 | 93,8 |
+| authenticated | INSERT / UPDATE / DELETE | 43 | 43 | 100 |
+| public | SELECT | 44 | 39 | 88,6 |
+| public | ALL | 29 | 27 | 93,1 |
+| public | INSERT / UPDATE / DELETE | 36 | 36 | 100 |
+
+O padrão é nítido e revela algo sobre como o sistema foi construído: **as operações de
+escrita estão universalmente isoladas; as de leitura não.** Todas as 43 políticas de
+`INSERT`, `UPDATE` e `DELETE` para `authenticated` amarram a linha ao usuário. As falhas se
+concentram em `SELECT` — 4 políticas em `authenticated` e 5 em `public` sem qualquer
+referência a `auth.uid()`, ao JWT ou a coluna de tenant. Uma política de `SELECT` para
+`authenticated` sem filtro significa que qualquer conta logada alcança as linhas de todas as
+outras.
+
+Há também **uma política `SELECT` com `USING(true)`** para `authenticated`, que concede
+leitura irrestrita.
+
+As 209 políticas distribuídas em 70 tabelas — cerca de três por tabela — formam uma
+superfície que dificilmente alguém revisa por completo. Vale o princípio de *economia de
+mecanismo*, também de Saltzer e Schroeder, e a formulação mais direta de Bruce Schneier: a
+complexidade é o pior inimigo da segurança. Não é que cada política esteja errada; é que o
+volume torna improvável que todas estejam certas.
+
+`SCREENSHOT`
 
 ### P4 — Escrita disponível à role anônima
-`PREENCHER` · `SCREENSHOT`
+
+**Resultado: 294 achados de privilégio anônimo, dos quais 39 sobre tabelas com dado de saúde.**
+
+Este número precisa ser lido com cuidado, e é onde o `score_ajustado` faz diferença. O
+Supabase concede `GRANT` amplo a `anon` e `authenticated` **por padrão de arquitetura**, e
+delega a proteção ao RLS. Esses 333 achados (R08 + R16) descrevem o modelo da plataforma, não
+um defeito introduzido pela aplicação — por isso foram marcados como `esperado_por_design` e
+removidos do score ajustado, sem serem descartados do modelo.
+
+O que eles revelam continua sendo relevante, e é arquitetural: **o RLS é o único controle
+entre a chave anônima e os dados.** Não há defesa em profundidade. Desabilitar RLS em
+qualquer uma dessas tabelas, por qualquer motivo — uma migração, um debug, um ajuste
+apressado — converte imediatamente 333 possibilidades em 333 vulnerabilidades, e 39 delas
+atingiriam dado clínico.
+
+Vale registrar que integridade é uma dimensão distinta de confidencialidade, na linha do
+modelo de Clark e Wilson (1987). A maioria das auditorias examina apenas leitura indevida. Em
+um sistema de saúde, escrita indevida permite inserir registro falso no prontuário de
+alguém — e o impacto disso pode superar o de um vazamento.
+
+`SCREENSHOT`
 
 ### P5 — Concentração de risco por schema
-`PREENCHER` · `SCREENSHOT`
+
+| schema | domínio | objetos | achados | score bruto | score ajustado | por objeto |
+|---|---|---|---|---|---|---|
+| `app_s6` | aplicação | 70 | 489 | 2.331 | **271** | 33,3 |
+| `storage` | Supabase | 8 | 30 | 144 | 62 | 18,0 |
+| `cron` | Supabase | 2 | 4 | 14 | 14 | 7,0 |
+| `auth` | Supabase | 27 | 32 | 112 | 112 | 4,2 |
+| `app_s5` | aplicação | 9 | 10 | 12 | 12 | 1,3 |
+
+O contraste entre score bruto e ajustado no `app_s6` é o resultado mais instrutivo da tabela:
+**2.331 caem para 271, uma redução de 88%.** Essa diferença é a medida exata de quanto do
+"risco" aparente era característica da plataforma em vez de decisão da aplicação. Sem essa
+separação, o relatório apontaria 489 achados no schema principal e enterraria os poucos que
+realmente exigem ação.
+
+Normalizado por objeto, `app_s6` ainda lidera (33,3), mas a comparação com os schemas
+gerenciados pelo Supabase dá a escala correta: `auth`, mantido pela própria plataforma e
+supostamente exemplar, registra 4,2 achados por objeto. A diferença é real, e não é
+catastrófica.
+
+`SCREENSHOT`
 
 ### P6 — Distribuição pelo OWASP Top 10:2025
-`PREENCHER` · `SCREENSHOT`
+
+| categoria | achados | score | % do total |
+|---|---|---|---|
+| **A01 Broken Access Control** | 346 | 2.240 | 59,8% dos achados, **82,8% do score** |
+| A02 Security Misconfiguration | 182 | 236 | 31,4% |
+| A06 Insecure Design | 46 | 213 | 7,9% |
+| A08 Software and Data Integrity Failures | 3 | 9 | 0,5% |
+| A03 Software Supply Chain Failures | 2 | 6 | 0,3% |
+
+A concentração em A01 era esperada e confirma o diagnóstico: o risco de uma aplicação
+multi-tenant de saúde é, essencialmente, controle de acesso. Vale registrar duas mudanças da
+edição 2025, publicada em janeiro de 2026 sobre a análise de mais de 175 mil CVEs: **A02
+Security Misconfiguration subiu de #5 para #2**, porque má configuração passou a dominar os
+dados — e os 182 achados de A02 aqui, ainda que de baixa severidade, ilustram isso na escala
+de uma única aplicação. E **A03 Software Supply Chain Failures é categoria nova**; os dois
+achados de extensão instalada fora do schema `extensions` caem exatamente nela.
+
+`SCREENSHOT`
 
 ### P7 — Colunas com dado de saúde sem proteção
-`PREENCHER` · `SCREENSHOT`
+
+**Resultado: zero. 210 de 210 colunas de dado de saúde estão em tabelas com RLS.**
+
+| classe | colunas | protegidas | expostas | % exposta |
+|---|---|---|---|---|
+| `saude_metrica` | 139 | 139 | 0 | 0,0 |
+| `saude_clinica` | 70 | 70 | 0 | 0,0 |
+| `credencial` | 22 | 22 | 0 | 0,0 |
+| demais classes | 17 | 17 | 0 | 0,0 |
+
+Em termos regulatórios: nenhuma coluna classificada como dado referente à saúde — categoria
+que o art. 5º, II da LGPD trata como sensível e cujo tratamento o art. 11 condiciona a base
+legal específica — está em tabela alcançável sem controle de linha. A obrigação do art. 46,
+de adotar medidas de segurança proporcionais ao risco, está atendida no nível da
+exposição direta.
+
+É importante delimitar o que esse zero significa. Na taxonomia de privacidade de Daniel
+Solove (2006), ele cobre **exposure** — a revelação direta. Não cobre **aggregation**: quantos
+prontuários distintos um mesmo perfil consegue percorrer em sequência, ainda que cada acesso
+individual seja legítimo. Essa dimensão não foi medida e permanece em aberto.
+
+`SCREENSHOT`
 
 ### P8 — Isolamento de prontuário entre pacientes
-`PREENCHER` · `SCREENSHOT`
+
+**Resultado: 36 de 38 tabelas com dado de saúde estão corretamente isoladas. Duas não.**
+
+| tabela | colunas de saúde | RLS | políticas | com isolamento | veredito |
+|---|---|---|---|---|---|
+| `t_105` | 3 | sim | 18 | 12 | **vazamento entre pacientes** |
+| `t_088` | 1 | sim | 3 | 2 | **vazamento entre pacientes** |
+| outras 36 | 1 a 21 | sim | 9 a 84 | todas | isoladas |
+
+Nas duas tabelas existe política concedida a `authenticated` sem filtro por usuário ou
+tenant. Na prática: qualquer conta autenticada do Pitaia alcança o dado clínico daquelas
+tabelas para qualquer paciente. Note que ambas têm RLS habilitado e a maioria de suas
+políticas corretamente isolada — `t_105` tem 12 de 18 — o que torna a falha invisível a
+qualquer verificação binária do tipo "essa tabela tem RLS?".
+
+Este é o achado central do trabalho, e a literatura sobre o tema é específica. Ross Anderson
+escreveu em 1996 o modelo de política de segurança da British Medical Association para
+sistemas de informação clínica, referência canônica sobre controle de acesso a prontuário.
+Seu primeiro princípio é que **cada registro clínico carrega sua própria lista de controle de
+acesso**. Nas duas tabelas, o controle degrada de "quem tem relação com este paciente" para
+"qualquer conta autenticada". O modelo BMA prevê ainda notificação ao paciente sobre quem
+acessou seu registro e controle de agregação — nenhum dos dois implementado na plataforma,
+o que fica registrado em trabalhos futuros.
+
+Há também uma leitura de **integridade contextual**, no sentido de Helen Nissenbaum (2010):
+o dado carrega normas de fluxo ligadas ao contexto em que foi coletado. No Pitaia isso é
+literal, porque existem três perfis distintos — paciente, médico e educador físico — e o que
+faz sentido um médico ver não necessariamente faz sentido um educador físico ver. Não é uma
+permissão binária, é uma norma de contexto, e políticas que não distinguem papel não
+conseguem expressá-la.
+
+**Limite desta análise, que precisa ser declarado.** A consulta demonstra o que o *banco*
+permite, não o que a *aplicação* expõe. O front-end pode filtrar por conta própria. Mas
+confiar nesse filtro contraria o princípio de **mediação completa** de Saltzer e Schroeder, e
+é exatamente o que o RLS existe para tornar desnecessário: qualquer chamada direta ao
+PostgREST com um JWT válido contorna o front-end inteiro. Na formulação do NIST SP 800-207
+sobre Zero Trust, o ponto de aplicação de política precisa estar junto ao dado, não na
+interface que o consome.
+
+`SCREENSHOT`
 
 ### Discussão geral
-`PREENCHER — conecte as oito respostas ao problema original: qual é o veredito sobre a
-postura do Pitaia; qual o achado mais grave e por quê; o padrão dos achados revela uma causa
-raiz comum (por exemplo, tabela criada antes da política); como a comparação com os schemas
-gerenciados pelo Supabase contextualiza os números; o que o backlog manda fazer primeiro.`
+
+**O veredito.** A postura de segurança do Pitaia é substancialmente melhor do que a média de
+aplicações construídas com geração assistida de código sobre Supabase. RLS habilitado em 100%
+das tabelas expostas, 210 colunas de dado de saúde sem nenhuma exposição direta, e 36 das 38
+tabelas clínicas com isolamento correto. Dos 579 achados brutos, **oito são defeitos reais
+introduzidos pela aplicação**: 4 funções `SECURITY DEFINER` sem `search_path` fixado, 2
+buckets de Storage públicos e 2 tabelas de saúde legíveis por qualquer conta autenticada.
+
+**A causa raiz.** O padrão sugere uma assimetria consistente: habilitar RLS virou hábito
+automático, escrever a política correta não. Daí 25 tabelas com RLS e nenhuma política, 9
+políticas de `SELECT` sem isolamento e 100% das políticas de escrita corretas. Proteger
+escrita é intuitivo — ninguém quer que outro usuário altere seus dados. Proteger leitura
+exige pensar no cenário em que alguém *consulta* dado alheio, que é menos imediato e,
+num sistema de saúde, mais grave.
+
+**O que o backlog manda fazer, nesta ordem.** As 4 funções `SECURITY DEFINER` sem
+`search_path` vêm primeiro: são vetor de escalada de privilégio, executam com o privilégio do
+criador e contornam RLS inteiramente. Depois os 2 buckets públicos, verificando antes se
+armazenam arquivos de paciente. Em terceiro, as 2 tabelas de saúde sem isolamento. As 25
+tabelas com RLS e zero políticas entram em seguida, como correção de funcionalidade.
+
+**O que a comparação contextualiza.** O schema da aplicação registra 33,3 pontos de risco por
+objeto contra 4,2 do schema `auth`, mantido pela própria Supabase. A diferença é real, mas o
+score ajustado mostra que 88% do risco bruto do `app_s6` vinha de grants que a plataforma
+concede por padrão. Sem o grupo de comparação, qualquer número absoluto seria indefensável.
 
 ---
 
