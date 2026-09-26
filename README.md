@@ -234,6 +234,7 @@ Perfilamento feito **antes** de qualquer limpeza — medir depois não prova nad
 | 3 | Booleanos em formatos mistos | Consistência | normalização para boolean | todas as flags |
 | 4 | Views presentes em `colunas` mas sem RLS aplicável | Acurácia | separação por `tipo_objeto`, regra própria (R07) | 3 views, 60 colunas |
 | 5 | Grants duplicados por herança de role | Unicidade | `dropDuplicates` com contagem prévia | 3.826 linhas, **0 duplicatas** |
+| 5b | 30 repetições em `funcoes` pela chave `(schema, nome)` | Unicidade | **não deduplicadas** — são overloads, ver nota | 195 linhas, 165 nomes distintos |
 | 6 | Schemas do Supabase misturados aos da aplicação | Escopo | flag `dominio`, mantidos como comparação | 2 schemas / 79 objetos da aplicação vs 8 schemas / 54 objetos do Supabase |
 | 7 | Falso positivo e falso negativo do classificador LGPD | Acurácia | amostra de 40 colunas rotulada à mão | precisão `PREENCHER` · recall `PREENCHER` |
 
@@ -241,6 +242,16 @@ Perfilamento feito **antes** de qualquer limpeza — medir depois não prova nad
 exatamente uma role, então 209 políticas produziram 209 pares política × role. A
 transformação continua necessária — sem ela o campo `roles` é um texto não consultável — mas
 o impacto em volume foi nulo. Registro porque o resultado esperado era outro.
+
+**Sobre o item 5b — o achado que mudou a modelagem.** O perfil de duplicatas acusou 30
+repetições em `funcoes` pela chave `(schema_nome, funcao)`. Investigadas, são **funções
+sobrecarregadas** do PostgreSQL: mesmo nome, assinaturas distintas, cada uma com suas
+próprias flags de segurança. A deduplicação ingênua, que era o que o pipeline fazia, teria
+descartado 30 linhas — e se qualquer uma delas fosse `SECURITY DEFINER` sem `search_path`, a
+regra R04 perderia o achado em silêncio. Falso negativo numa regra crítica é o pior
+resultado possível numa auditoria: ela reporta segurança que não existe. A chave natural
+correta dessa tabela não é o nome da função, e por isso ela deixou de ser deduplicada. É o
+caso mais claro do trabalho em que **medir a qualidade dos dados corrigiu a modelagem**.
 
 **Sobre o item 5.** A deduplicação não removeu nenhuma linha: a ACL lida de `pg_class.relacl`
 já é única por tupla role × objeto × privilégio. A verificação foi executada e o resultado

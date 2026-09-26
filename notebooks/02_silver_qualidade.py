@@ -312,7 +312,10 @@ display(amostra)
 
 pol = (bronze("politicas")
        .filter(~F.col("schema_nome").isin(SISTEMA))
-       .withColumn("role_nome", F.trim(F.explode(F.split(F.coalesce(F.col("roles"), F.lit("")), ";"))))
+       # explode precisa vir sozinho: Spark nao aceita gerador aninhado em outra
+       # expressao (UNSUPPORTED_GENERATOR.NESTED_IN_EXPRESSIONS). Trim vem na linha seguinte.
+       .withColumn("role_nome", F.explode(F.split(F.coalesce(F.col("roles"), F.lit("")), ";")))
+       .withColumn("role_nome", F.trim(F.col("role_nome")))
        .filter(F.col("role_nome") != "")
        .withColumn("permissiva", F.upper(F.trim(F.col("permissive"))) == "PERMISSIVE")
        # politica so com WITH CHECK tem qual nulo - uso coalesce em vez de descartar
@@ -360,11 +363,17 @@ salvar(bronze("funcoes")
        .withColumn("security_definer", booleano("security_definer"))
        .withColumn("tem_search_path", F.coalesce(F.col("config"), F.lit("")).contains("search_path"))
        .select("schema_nome", "funcao", "security_definer", "tem_search_path", "linguagem", "_snapshot")
-       .dropDuplicates(["schema_nome", "funcao"]),
+       # NAO deduplicar por (schema_nome, funcao). O perfil de duplicatas acusou 30
+       # repeticoes, que sao overloads do Postgres: mesma funcao, assinaturas diferentes,
+       # cada uma com suas proprias flags. Descartar 30 esconderia um SECURITY DEFINER
+       # vulneravel e daria falso negativo na R04. Dedup so de linha integralmente igual.
+       .dropDuplicates(),
        "funcao",
-       "Um registro por funcao. security_definer executa com privilegio do criador e "
-       "contorna RLS; sem search_path fixado isso viabiliza escalada de privilegio. "
-       "O corpo da funcao nao foi coletado. Origem: bronze.funcoes.")
+       "Uma linha por funcao. Funcoes sobrecarregadas (mesmo nome, assinaturas diferentes) "
+       "ficam em linhas distintas de proposito: cada assinatura tem suas proprias flags de "
+       "seguranca. security_definer executa com privilegio do criador e contorna RLS; sem "
+       "search_path fixado isso viabiliza escalada de privilegio. O corpo da funcao nao foi "
+       "coletado. Origem: bronze.funcoes.")
 
 salvar(bronze("buckets").withColumn("publico", booleano("publico"))
        .select("bucket_id", "bucket_nome", "publico", "_snapshot"),
