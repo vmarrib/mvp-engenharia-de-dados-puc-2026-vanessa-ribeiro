@@ -8,7 +8,7 @@
 
 -- COMMAND ----------
 USE CATALOG workspace;
-USE SCHEMA pitaia_gold;
+USE SCHEMA gold;
 
 -- COMMAND ----------
 -- MAGIC %md

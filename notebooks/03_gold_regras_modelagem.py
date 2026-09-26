@@ -21,8 +21,8 @@
 from pyspark.sql import functions as F
 
 CATALOGO = "workspace"
-SILVER   = f"{CATALOGO}.pitaia_silver"
-GOLD     = f"{CATALOGO}.pitaia_gold"
+SILVER   = f"{CATALOGO}.silver"
+GOLD     = f"{CATALOGO}.gold"
 
 spark.sql(f"CREATE SCHEMA IF NOT EXISTS {GOLD} COMMENT "
           "'Achados de seguranca modelados em estrela e backlog de remediacao priorizado.'")

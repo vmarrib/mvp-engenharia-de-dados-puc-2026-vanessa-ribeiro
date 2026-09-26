@@ -24,7 +24,7 @@ from pyspark.sql.functions import current_timestamp, lit, input_file_name
 from datetime import date
 
 CATALOGO   = "workspace"          # ajuste se criou catalogo proprio
-SCH_BRONZE = "pitaia_bronze"
+SCH_BRONZE = "bronze"
 VOLUME     = "raw"
 SNAPSHOT   = date.today().isoformat()
 

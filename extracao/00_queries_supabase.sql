@@ -58,33 +58,50 @@ order by schemaname, tablename, policyname;
 
 -- ---------------------------------------------------------------------
 -- QUERY C  |  SALVAR COMO: colunas.csv
--- Todas as colunas. Base da classificacao de dado pessoal (LGPD).
+-- Todas as colunas. Base da classificacao de dado de saude (LGPD art. 11).
+-- ATENCAO: NAO usar information_schema.columns aqui. Aquela view e filtrada
+-- por privilegio: so mostra o que a role corrente enxerga, e no SQL Editor
+-- isso devolve um subconjunto silencioso. pg_attribute nao filtra.
 -- ---------------------------------------------------------------------
 select
-    table_schema  as schema_nome,
-    table_name    as objeto,
-    column_name   as coluna,
-    data_type     as tipo_dado,
-    is_nullable,
-    ordinal_position,
-    column_default
-from information_schema.columns
-order by table_schema, table_name, ordinal_position;
+    n.nspname                                   as schema_nome,
+    c.relname                                   as objeto,
+    a.attname                                   as coluna,
+    format_type(a.atttypid, a.atttypmod)        as tipo_dado,
+    case when a.attnotnull then 'NO' else 'YES' end as is_nullable,
+    a.attnum                                    as ordinal_position,
+    pg_get_expr(d.adbin, d.adrelid)             as column_default
+from pg_attribute a
+join pg_class c     on c.oid = a.attrelid
+join pg_namespace n on n.oid = c.relnamespace
+left join pg_attrdef d on d.adrelid = a.attrelid and d.adnum = a.attnum
+where a.attnum > 0 and not a.attisdropped
+  and c.relkind in ('r','p','v','m','f')
+order by n.nspname, c.relname, a.attnum;
 
 
 -- ---------------------------------------------------------------------
 -- QUERY D  |  SALVAR COMO: grants.csv
--- Privilegios por role. E aqui que se ve o que "anon" alcanca.
--- Costuma ser a tabela de maior volume da extracao.
+-- Privilegios por role. E aqui que se ve o que "anon" e "authenticated" alcancam.
+-- ATENCAO: information_schema.role_table_grants SO mostra grants em que a role
+-- corrente e concedente, beneficiaria ou membro da role beneficiaria. Rodando no
+-- SQL Editor ela devolve apenas os grants da propria role de execucao - inutil
+-- para auditoria. aclexplode() sobre pg_class.relacl le a ACL real.
+-- grantee = 0 significa PUBLIC (todo mundo).
 -- ---------------------------------------------------------------------
 select
-    grantee        as role_nome,
-    table_schema   as schema_nome,
-    table_name     as objeto,
-    privilege_type as privilegio,
-    is_grantable
-from information_schema.role_table_grants
-order by grantee, table_schema, table_name, privilege_type;
+    case when a.grantee = 0 then 'PUBLIC'
+         else pg_get_userbyid(a.grantee) end    as role_nome,
+    n.nspname                                   as schema_nome,
+    c.relname                                   as objeto,
+    a.privilege_type                            as privilegio,
+    case when a.is_grantable then 'YES' else 'NO' end as is_grantable
+from pg_class c
+join pg_namespace n on n.oid = c.relnamespace
+cross join lateral aclexplode(
+    coalesce(c.relacl, acldefault('r', c.relowner))) a
+where c.relkind in ('r','p','v','m','f')
+order by role_nome, n.nspname, c.relname, a.privilege_type;
 
 
 -- ---------------------------------------------------------------------
@@ -136,14 +153,19 @@ order by e.extname;
 
 -- ---------------------------------------------------------------------
 -- QUERY H  |  SALVAR COMO: constraints.csv
--- Chaves primarias e unicas. Tabela sem PK e risco de integridade
--- e impede deduplicacao confiavel (OWASP A08:2025).
+-- Chaves primarias, unicas e estrangeiras. Tabela sem PK impede deduplicacao
+-- confiavel (OWASP A08:2025). pg_constraint tambem evita o filtro por privilegio
+-- do information_schema.
 -- ---------------------------------------------------------------------
 select
-    tc.table_schema   as schema_nome,
-    tc.table_name     as objeto,
-    tc.constraint_name as constraint_nome,
-    tc.constraint_type as tipo
-from information_schema.table_constraints tc
-where tc.constraint_type in ('PRIMARY KEY','UNIQUE','FOREIGN KEY')
-order by tc.table_schema, tc.table_name;
+    n.nspname   as schema_nome,
+    c.relname   as objeto,
+    con.conname as constraint_nome,
+    case con.contype when 'p' then 'PRIMARY KEY'
+                     when 'u' then 'UNIQUE'
+                     when 'f' then 'FOREIGN KEY' end as tipo
+from pg_constraint con
+join pg_class c     on c.oid = con.conrelid
+join pg_namespace n on n.oid = c.relnamespace
+where con.contype in ('p','u','f')
+order by n.nspname, c.relname, con.conname;

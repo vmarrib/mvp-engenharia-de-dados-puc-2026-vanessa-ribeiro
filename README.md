@@ -80,16 +80,25 @@ discutido na Autoavaliação.
 Oito extrações do catálogo do PostgreSQL. **Nenhum dado de paciente foi coletado** —
 somente metadados de estrutura e permissão.
 
+Três das oito consultas foram reescritas durante a coleta. As versões iniciais usavam
+`information_schema`, cujas views são **filtradas por privilégio**: só retornam o que a role
+de execução enxerga. Na prática isso devolveu 164 linhas de grants — todas de uma única role
+de sandbox — em vez da ACL real do banco, o que zeraria silenciosamente as regras de
+privilégio anônimo. As versões finais leem `pg_attribute`, `aclexplode(pg_class.relacl)` e
+`pg_constraint`, que não sofrem esse filtro. Está registrado aqui porque é uma armadilha
+real de coleta, não um detalhe de implementação: a consulta *funcionava* e devolvia dados
+plausíveis — só que incompletos.
+
 | Arquivo | Origem no PostgreSQL | Granularidade | Linhas |
 |---|---|---|---|
-| `objetos.csv` | `pg_class` + `pg_namespace` | 1 por objeto do banco | `PREENCHER` |
-| `politicas.csv` | `pg_policies` | 1 por política de RLS | `PREENCHER` |
-| `colunas.csv` | `information_schema.columns` | 1 por coluna | `PREENCHER` |
-| `grants.csv` | `information_schema.role_table_grants` | 1 por role × objeto × privilégio | `PREENCHER` |
-| `funcoes.csv` | `pg_proc` (somente flags) | 1 por função | `PREENCHER` |
-| `buckets.csv` | `storage.buckets` | 1 por bucket de Storage | `PREENCHER` |
-| `extensoes.csv` | `pg_extension` | 1 por extensão instalada | `PREENCHER` |
-| `constraints.csv` | `information_schema.table_constraints` | 1 por constraint | `PREENCHER` |
+| `objetos.csv` | `pg_class` + `pg_namespace` | 1 por objeto do banco | 344 |
+| `politicas.csv` | `pg_policies` | 1 por política de RLS | 209 |
+| `colunas.csv` | `pg_attribute` | 1 por coluna | `PREENCHER (re-extrair)` |
+| `grants.csv` | `aclexplode(pg_class.relacl)` | 1 por role × objeto × privilégio | `PREENCHER (re-extrair)` |
+| `funcoes.csv` | `pg_proc` (somente flags) | 1 por função | 195 |
+| `buckets.csv` | `storage.buckets` | 1 por bucket de Storage | 7 |
+| `extensoes.csv` | `pg_extension` | 1 por extensão instalada | 8 |
+| `constraints.csv` | `pg_constraint` | 1 por constraint | `PREENCHER (re-extrair)` |
 
 ### Licença e base legal dos dados
 

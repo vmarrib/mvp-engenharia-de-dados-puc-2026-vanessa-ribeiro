@@ -27,10 +27,10 @@ import matplotlib.ticker as ticker
 import numpy as np
 
 CATALOGO = "workspace"
-GOLD     = f"{CATALOGO}.pitaia_gold"
-FIGURAS  = f"/Volumes/{CATALOGO}/pitaia_gold/figuras"
+GOLD     = f"{CATALOGO}.gold"
+FIGURAS  = f"/Volumes/{CATALOGO}/gold/figuras"
 
-spark.sql(f"CREATE VOLUME IF NOT EXISTS {CATALOGO}.pitaia_gold.figuras")
+spark.sql(f"CREATE VOLUME IF NOT EXISTS {CATALOGO}.gold.figuras")
 
 SUPERFICIE = "#fcfcfb"
 TINTA      = "#0b0b0b"
@@ -256,5 +256,5 @@ plt.show()
 # COMMAND ----------
 
 # MAGIC %md
-# MAGIC Os PNGs ficam no Volume `pitaia_gold.figuras`. Baixo pelo Catalog Explorer
-# MAGIC (Catalog > pitaia_gold > figuras > download) e coloco em `evidencias/` no repositorio.
+# MAGIC Os PNGs ficam no Volume `gold.figuras`. Baixo pelo Catalog Explorer
+# MAGIC (Catalog > gold > figuras > download) e coloco em `evidencias/` no repositorio.

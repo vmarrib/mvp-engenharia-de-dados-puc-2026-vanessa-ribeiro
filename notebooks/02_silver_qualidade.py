@@ -16,8 +16,8 @@ from pyspark.sql import functions as F
 from pyspark.sql.window import Window
 
 CATALOGO = "workspace"
-BRONZE   = f"{CATALOGO}.pitaia_bronze"
-SILVER   = f"{CATALOGO}.pitaia_silver"
+BRONZE   = f"{CATALOGO}.bronze"
+SILVER   = f"{CATALOGO}.silver"
 
 spark.sql(f"CREATE SCHEMA IF NOT EXISTS {SILVER} COMMENT "
           "'Catalogo de seguranca do Pitaia limpo, tipado e com classificacao LGPD. "
@@ -118,7 +118,7 @@ SUPABASE = ["auth", "storage", "realtime", "vault", "extensions", "graphql",
 SISTEMA  = ["pg_catalog", "information_schema", "pg_toast"]
 
 # conferir em Supabase > Settings > API > Exposed schemas. O padrao e so public.
-EXPOSTOS = ["public"]
+EXPOSTOS = ["public", "graphql_public"]
 
 tipo = (F.when(F.col("tipo_bruto") == "r", "tabela")
          .when(F.col("tipo_bruto") == "p", "tabela_particionada")
@@ -180,41 +180,76 @@ salvar(obj.select("schema_nome", "objeto", "schema_anon", "objeto_anon"),
 
 # COMMAND ----------
 
-# ordem importa: a primeira classe que casar vence
-CLASSES = [
-    ("credencial",    r"senha|password|passwd|secret|token|api_?key|chave_priv|refresh_token"),
-    ("saude",         r"diagnostic|prontuario|\bcid\b|cid10|anamnese|sintoma|doenca|comorbidade|"
-                      r"medicament|posologia|prescri|receita|alergia|exame|laudo|hemograma|"
-                      r"glicemia|colesterol|pressao_art|vacina|cirurgia|internacao|tratamento|"
-                      r"terapia|consulta|atestado|queixa|evolucao_clinica|historico_medico"),
-    ("saude_metrica", r"\bpeso\b|\baltura\b|\bimc\b|\bbmi\b|circunferencia|gordura_corp|"
-                      r"massa_muscular|batimento|freq_cardiaca|frequencia_card|\bspo2\b|"
-                      r"saturacao|\bsono\b|passos|calorias|\bvo2\b|hidratacao|glicose"),
-    ("biometrico",    r"biometr|impressao_dig|reconhecimento_fac|facial"),
-    ("documento",     r"\bcpf\b|\bcnpj\b|\brg\b|documento|passaporte|\bcnh\b|cartao_sus|\bcns\b"),
-    ("prof_saude",    r"\bcrm\b|crefito|\bcref\b|conselho_reg|especialidade|registro_prof"),
-    ("financeiro",    r"cartao|\bcard\b|iban|agencia|conta_banc|\bpix\b|boleto|assinatura_valor"),
-    ("origem_racial", r"\braca\b|etnia|cor_pele"),
-    ("religiao",      r"religi|crenca"),
-    ("email",         r"e_?mail"),
-    ("telefone",      r"telefone|celular|phone|whats|\bfone\b"),
-    ("endereco",      r"endereco|logradouro|\bcep\b|bairro|complemento"),
-    ("nascimento",    r"nascimento|birth|\bdob\b|data_nasc|idade"),
-    ("nome_pessoa",   r"^nome$|nome_completo|sobrenome|first_name|last_name|full_name|nome_paciente"),
-    ("localizacao",   r"latitude|longitude|\blat\b|\blng\b|geoloc|coordenada"),
+# O schema do Pitaia e em ingles, entao os padroes sao em ingles com alguns termos
+# em portugues por seguranca.
+#
+# Classifico por TABELA e por COLUNA. Isso importa: uma coluna chamada "notes" dentro
+# de medical_record_notes e dado clinico; a mesma coluna "notes" em checkin_groups nao
+# e. Olhar so o nome da coluna perde a maior parte do dado de saude - na primeira
+# versao eu achava 12 colunas em 640, o que era obviamente errado para uma plataforma
+# de saude. Com heranca de tabela sao 248.
+
+TABELA_CLASSE = [
+    ("saude_clinica", r"medical_record|anamnesis|lab_(result|marker)|medication|menstrual|"
+                      r"anxiety|crisis|diagnos|symptom|treatment|prescription|patient_file|"
+                      r"diary_entr|self_assessment|questionnaire_answer|prontuario|exame"),
+    ("saude_metrica", r"body_measurement|wearable_metric|exercise_log|workout_log|"
+                      r"workout_feedback|\bmeals?\b|nutrition|photo_tracking|checkin|"
+                      r"\bgoals?\b|alert_completion|assigned_(workout|questionnaire)"),
+    ("credencial",    r"ai_keys|otp|trusted_device|unsubscribe_token|invite_link"),
 ]
 
-SENSIVEIS = ["saude", "saude_metrica", "biometrico", "origem_racial", "religiao"]
+COLUNA_CLASSE = [
+    ("credencial",    r"senha|password|secret|token|api_?key|otp|refresh"),
+    ("saude_clinica", r"diagnos|symptom|medication|dosage|prescri|allerg|anamnes|lab_|marker|"
+                      r"clinical|medical|crisis|severity|mood|pain|sleep_quality|cid10"),
+    ("saude_metrica", r"weight|height|\bbmi\b|body_fat|muscle|circumference|heart_rate|\bbpm\b|"
+                      r"spo2|steps|calories|hydration|glucose|sleep|intensity|reps|duration_min"),
+    ("biometrico",    r"biometr|face_|fingerprint"),
+    ("documento",     r"\bcpf\b|\bcnpj\b|\brg\b|passport|\bcnh\b|\bcns\b|document_number"),
+    ("prof_saude",    r"\bcrm\b|crefito|\bcref\b|council|license_number|specialty"),
+    ("financeiro",    r"card_|iban|\bpix\b|bank_|invoice"),
+    ("email",         r"e_?mail"),
+    ("telefone",      r"phone|whatsapp|mobile_number|telefone|celular"),
+    ("endereco",      r"address|zip_?code|postal|street|neighborhood|\bcep\b"),
+    ("nascimento",    r"birth|\bdob\b|nascimento|\bage\b"),
+    ("nome_pessoa",   r"^name$|full_name|first_name|last_name|display_name|patient_name"),
+    ("localizacao",   r"latitude|longitude|\blat\b|\blng\b|geoloc"),
+]
 
-classe = F.lit(None).cast("string")
-for nome, padrao in reversed(CLASSES):
-    classe = F.when(F.lower(F.col("coluna")).rlike(padrao), F.lit(nome)).otherwise(classe)
+# colunas de controle nao herdam a sensibilidade da tabela: um created_at de
+# medical_record_notes nao e dado de saude
+TECNICAS = r"^(id|created_at|updated_at|deleted_at|.*_id|sort_order|is_active|version|status|type|created_by|updated_by)$"
+
+SAUDE = ["saude_clinica", "saude_metrica"]
+SENSIVEIS = SAUDE + ["biometrico", "origem_racial", "religiao"]
+
+col_lower = F.lower(F.col("coluna"))
+tab_lower = F.lower(F.col("objeto"))
+
+# classe pela coluna (mais especifica, tem prioridade)
+por_coluna = F.lit(None).cast("string")
+for nome, padrao in reversed(COLUNA_CLASSE):
+    por_coluna = F.when(col_lower.rlike(padrao), F.lit(nome)).otherwise(por_coluna)
+
+# classe herdada da tabela
+por_tabela = F.lit(None).cast("string")
+for nome, padrao in reversed(TABELA_CLASSE):
+    por_tabela = F.when(tab_lower.rlike(padrao), F.lit(nome)).otherwise(por_tabela)
 
 col = (bronze("colunas")
        .filter(~F.col("schema_nome").isin(SISTEMA))
-       .withColumn("classe_dado", classe)
+       .withColumn("classe_por_coluna", por_coluna)
+       .withColumn("classe_por_tabela", por_tabela)
+       .withColumn("coluna_tecnica", col_lower.rlike(TECNICAS))
+       .withColumn("classe_dado",
+                   F.coalesce(F.col("classe_por_coluna"),
+                              F.when(~F.col("coluna_tecnica"), F.col("classe_por_tabela"))))
+       .withColumn("origem_classificacao",
+                   F.when(F.col("classe_por_coluna").isNotNull(), "coluna")
+                    .when(F.col("classe_dado").isNotNull(), "tabela"))
        .withColumn("is_dado_pessoal", F.col("classe_dado").isNotNull())
-       .withColumn("is_dado_saude", F.col("classe_dado").isin("saude", "saude_metrica"))
+       .withColumn("is_dado_saude", F.col("classe_dado").isin(SAUDE))
        .withColumn("is_dado_sensivel", F.col("classe_dado").isin(SENSIVEIS))
        .withColumn("nullable", booleano("is_nullable"))
        .withColumn("coluna_anon",
@@ -223,17 +258,22 @@ col = (bronze("colunas")
        .dropDuplicates(["schema_nome", "objeto", "coluna"]))
 
 silver_col = salvar(col.select("schema_nome", "objeto", "coluna", "coluna_anon", "tipo_dado",
-                              "nullable", "classe_dado", "is_dado_pessoal", "is_dado_saude",
-                              "is_dado_sensivel", "_snapshot"),
+                              "nullable", "classe_dado", "origem_classificacao",
+                              "is_dado_pessoal", "is_dado_saude", "is_dado_sensivel", "_snapshot"),
                     "coluna",
-                    "Um registro por coluna, com classificacao LGPD. is_dado_saude marca dado "
-                    "referente a saude (art. 11); is_dado_sensivel abrange todo o art. 5, II. "
-                    "Classificacao por heuristica de nome - acuracia estimada por amostra. "
-                    "Origem: bronze.colunas.")
+                    "Um registro por coluna, com classificacao LGPD. classe_dado vem do nome da "
+                    "coluna quando ha padrao especifico, senao e herdada do nome da tabela - "
+                    "colunas tecnicas nao herdam. is_dado_saude marca o art. 11; is_dado_sensivel "
+                    "abrange o art. 5, II. Origem: bronze.colunas.")
 
-total, pessoais = silver_col.count(), silver_col.filter("is_dado_pessoal").count()
+total = silver_col.count()
+pessoais = silver_col.filter("is_dado_pessoal").count()
+saude = silver_col.filter("is_dado_saude").count()
 print(f"\n{pessoais}/{total} colunas classificadas como dado pessoal ({100*pessoais/total:.1f}%)")
-print(f"{silver_col.filter('is_dado_saude').count()} colunas de dado de saude")
+print(f"{saude} colunas de dado de saude, em "
+      f"{silver_col.filter('is_dado_saude').select('objeto').distinct().count()} tabelas")
+display(silver_col.groupBy("classe_dado", "origem_classificacao").count().orderBy(F.desc("count")))
+
 display(silver_col.groupBy("classe_dado", "is_dado_sensivel").count().orderBy(F.desc("count")))
 
 # COMMAND ----------
