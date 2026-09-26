@@ -11,7 +11,7 @@
 | **Plataforma de nuvem** | Databricks Free Edition — serverless, Unity Catalog, Delta Lake |
 | **Arquitetura** | Medalhão: Bronze → Silver → Gold |
 | **Fonte** | Catálogo do PostgreSQL do projeto Supabase da plataforma Pitaia (apitaia.com) |
-| **Snapshot** | `PREENCHER` |
+| **Snapshot** | 26 de setembro de 2026 |
 | **Referenciais** | OWASP Top 10:2025 · LGPD Lei 13.709/2018, arts. 5º, 11 e 46 |
 
 ```
@@ -93,12 +93,12 @@ plausíveis — só que incompletos.
 |---|---|---|---|
 | `objetos.csv` | `pg_class` + `pg_namespace` | 1 por objeto do banco | 344 |
 | `politicas.csv` | `pg_policies` | 1 por política de RLS | 209 |
-| `colunas.csv` | `pg_attribute` | 1 por coluna | `PREENCHER (re-extrair)` |
-| `grants.csv` | `aclexplode(pg_class.relacl)` | 1 por role × objeto × privilégio | `PREENCHER (re-extrair)` |
+| `colunas.csv` | `pg_attribute` | 1 por coluna | 3.311 |
+| `grants.csv` | `aclexplode(pg_class.relacl)` | 1 por role × objeto × privilégio | 5.707 |
 | `funcoes.csv` | `pg_proc` (somente flags) | 1 por função | 195 |
 | `buckets.csv` | `storage.buckets` | 1 por bucket de Storage | 7 |
 | `extensoes.csv` | `pg_extension` | 1 por extensão instalada | 8 |
-| `constraints.csv` | `pg_constraint` | 1 por constraint | `PREENCHER (re-extrair)` |
+| `constraints.csv` | `pg_constraint` | 1 por constraint | 380 |
 
 ### Licença e base legal dos dados
 
@@ -210,12 +210,12 @@ que cada etapa possa ser reexecutada isoladamente quando algo precisa de ajuste.
 
 | Transformação | O que foi feito | Por quê | Impacto |
 |---|---|---|---|
-| Explode de `roles` | `split(';')` + `explode` | `pg_policies.roles` é array; sem explodir não se consulta por role | `PREENCHER` → `PREENCHER` linhas |
+| Explode de `roles` | `split(';')` + `explode` | `pg_policies.roles` é array; sem explodir não se consulta por role | 209 → 209 linhas (ver nota) |
 | Normalização de booleanos | `t` / `true` / `1` → boolean | O export do Postgres é inconsistente entre colunas | Viabiliza filtro correto de RLS |
-| Classificação LGPD | regex sobre nome de coluna, 15 classes | Liga estrutura do banco a risco regulatório | `PREENCHER` colunas classificadas |
+| Classificação LGPD | regex sobre nome de **tabela e coluna**, 15 classes | Liga estrutura do banco a risco regulatório | 301 de 1.238 colunas, das quais 210 de saúde |
 | Flags de política | deriva `filtra_uid`, `filtra_tenant`, `libera_tudo` e descarta a expressão | Permite auditar isolamento sem publicar a estrutura de multi-tenancy | Todas as políticas |
 | Anonimização | `t_001`, `c_<hash>`, estável e determinística | Repositório público, plataforma de saúde em produção | 100% dos identificadores |
-| Motor de regras | 18 `SELECT` em `UNION ALL` sobre a Silver | Converte catálogo em achado acionável | `PREENCHER` achados |
+| Motor de regras | 18 `SELECT` em `UNION ALL` sobre a Silver | Converte catálogo em achado acionável | 589 achados, score 2.809 |
 | Score de risco | `peso × 3` (sensível), `× 2` (pessoal), `× 1` | Prioriza o que é regulatoriamente crítico | Ordena o backlog |
 
 `SCREENSHOT: Catalog Explorer com as tabelas persistidas nos três schemas`
@@ -229,13 +229,23 @@ Perfilamento feito **antes** de qualquer limpeza — medir depois não prova nad
 
 | # | Problema detectado | Dimensão | Tratamento | Volume |
 |---|---|---|---|---|
-| 1 | `roles` como array serializado | Consistência | `split` + `explode` | `PREENCHER` |
-| 2 | `expressao_using` nula em políticas só com `WITH CHECK` | Completude | flag `so_check` + `coalesce`, em vez de descartar | `PREENCHER` |
+| 1 | `roles` como array serializado | Consistência | `split` + `explode` | 209 → 209 |
+| 2 | `expressao_using` nula em políticas só com `WITH CHECK` | Completude | flag `so_check` + `coalesce`, em vez de descartar | 36 de 209 (17,2%) |
 | 3 | Booleanos em formatos mistos | Consistência | normalização para boolean | todas as flags |
-| 4 | Views presentes em `colunas` mas sem RLS aplicável | Acurácia | separação por `tipo_objeto`, regra própria (R07) | `PREENCHER` |
-| 5 | Grants duplicados por herança de role | Unicidade | `dropDuplicates` com contagem prévia | `PREENCHER` |
-| 6 | Schemas do Supabase misturados aos da aplicação | Escopo | flag `dominio`, mantidos como comparação | `PREENCHER` |
+| 4 | Views presentes em `colunas` mas sem RLS aplicável | Acurácia | separação por `tipo_objeto`, regra própria (R07) | 3 views, 60 colunas |
+| 5 | Grants duplicados por herança de role | Unicidade | `dropDuplicates` com contagem prévia | 3.826 linhas, **0 duplicatas** |
+| 6 | Schemas do Supabase misturados aos da aplicação | Escopo | flag `dominio`, mantidos como comparação | 2 schemas / 79 objetos da aplicação vs 8 schemas / 54 objetos do Supabase |
 | 7 | Falso positivo e falso negativo do classificador LGPD | Acurácia | amostra de 40 colunas rotulada à mão | precisão `PREENCHER` · recall `PREENCHER` |
+
+**Sobre o item 1.** O explode não multiplicou linhas: cada política do Pitaia é concedida a
+exatamente uma role, então 209 políticas produziram 209 pares política × role. A
+transformação continua necessária — sem ela o campo `roles` é um texto não consultável — mas
+o impacto em volume foi nulo. Registro porque o resultado esperado era outro.
+
+**Sobre o item 5.** A deduplicação não removeu nenhuma linha: a ACL lida de `pg_class.relacl`
+já é única por tupla role × objeto × privilégio. A verificação foi executada e o resultado
+negativo está documentado em `silver.perfil_duplicatas`, conforme o enunciado pede para bases
+que se mostram limpas.
 
 Sobre o item 7: uma heurística de regex sobre nome de coluna erra nos dois sentidos. Em vez
 de apresentá-la como exata, 40 colunas foram amostradas e rotuladas manualmente para
