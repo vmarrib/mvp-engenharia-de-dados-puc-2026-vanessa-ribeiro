@@ -21,9 +21,16 @@ notebooks/02_silver_qualidade.py        perfil de qualidade, tipagem, classifica
 notebooks/03_gold_regras_modelagem.py   18 regras + esquema estrela + catálogo
 notebooks/04_analise_perguntas.sql      as 8 perguntas de negócio
 notebooks/05_visualizacoes.py           painel de indicadores + 4 figuras
+apresentacao/*.ipynb                    os mesmos notebooks exportados com as saídas
 docs/governanca_anonimizacao.md         decisões de privacidade do próprio trabalho
 docs/catalogo_de_dados.md               catálogo de dados transcrito
+evidencias/                             23 screenshots e figuras da execução
 ```
+
+> Os arquivos em `apresentacao/` são **exportações dos notebooks executados no Databricks
+> Free Edition**, incluídas para que as saídas possam ser lidas diretamente no GitHub, que
+> renderiza `.ipynb` de forma nativa. O pipeline não foi executado em Google Colab — toda a
+> execução ocorreu na plataforma de nuvem, conforme o item 2 do enunciado.
 
 ---
 
