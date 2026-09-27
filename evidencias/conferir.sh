@@ -6,7 +6,8 @@ ESPERADOS=(
   00_indicadores.png 01_owasp.png 02_exposicao_lgpd.png 03_heatmap_schema.png 04_backlog.png
   01_volume_csvs.png 02_ingestao_contagens.png 03_perfil_qualidade.png
   04_perfil_duplicatas.png 05_classe_dado.png 06_catalogo_tabela.png
-  07_catalogo_coluna.png 08_lineage.png 09_dim_regra.png 10_backlog.png
+  07_catalogo_coluna.png 08_lineage.png 09_dim_regra.png 10_backlog.png 11_catalogo_cobertura.png
+  11_catalogo_cobertura.png
   p1.png p2.png p3.png p4.png p5.png p6.png p7.png p8.png
 )
 faltam=0

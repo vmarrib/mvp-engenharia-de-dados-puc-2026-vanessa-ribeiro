@@ -235,7 +235,12 @@ Transcrito em [`docs/catalogo_de_dados.md`](docs/catalogo_de_dados.md) e aplicad
 
 ![Unity Catalog: descrição por coluna, incluindo o cálculo de `score_risco`](evidencias/07_catalogo_coluna.png)
 
-*Unity Catalog: descrição por coluna, incluindo o cálculo de `score_risco`*
+*Unity Catalog: descrição em **todas** as colunas de `fato_achado`*
+
+![Cobertura do catálogo: 107 de 107 colunas documentadas](evidencias/11_catalogo_cobertura.png)
+
+*O bloco de documentação varre todas as colunas das 11 tabelas Gold e audita a própria
+cobertura: 107 de 107, 100%. Se alguma ficasse sem descrição, seria impressa pelo nome.*
 
 ![Aba Lineage: o grafo Bronze → Silver → Gold, construído automaticamente](evidencias/08_lineage.png)
 
