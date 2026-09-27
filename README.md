@@ -171,7 +171,13 @@ Três decisões de projeto na camada Bronze:
 - **Metadados de controle** em toda tabela: `_ingerido_em`, `_fonte`, `_snapshot`,
   `_arquivo_origem`.
 
-`SCREENSHOT: Volume com os 8 CSVs · contagens por tabela`
+![Volume `bronze.raw` com os oito CSVs extraídos do Supabase](evidencias/01_volume_csvs.png)
+
+*Volume `bronze.raw` com os oito CSVs extraídos do Supabase*
+
+![Evidência de persistência: as oito tabelas Bronze e suas contagens](evidencias/02_ingestao_contagens.png)
+
+*Evidência de persistência: as oito tabelas Bronze e suas contagens*
 
 ---
 
@@ -216,8 +222,17 @@ multiplica o peso da regra por 3 quando o achado atinge dado sensível.
 Transcrito em [`docs/catalogo_de_dados.md`](docs/catalogo_de_dados.md) e aplicado no
 **Unity Catalog** via `COMMENT ON TABLE` e `ALTER COLUMN … COMMENT` no notebook 03.
 
-`SCREENSHOT: Catalog Explorer com comentários de tabela e de coluna`
-`SCREENSHOT: aba Lineage com o grafo Bronze → Silver → Gold`
+![Unity Catalog: descrição da tabela `gold.fato_achado`](evidencias/06_catalogo_tabela.png)
+
+*Unity Catalog: descrição da tabela `gold.fato_achado`*
+
+![Unity Catalog: descrição por coluna, incluindo o cálculo de `score_risco`](evidencias/07_catalogo_coluna.png)
+
+*Unity Catalog: descrição por coluna, incluindo o cálculo de `score_risco`*
+
+![Aba Lineage: o grafo Bronze → Silver → Gold, construído automaticamente](evidencias/08_lineage.png)
+
+*Aba Lineage: o grafo Bronze → Silver → Gold, construído automaticamente*
 
 ---
 
@@ -246,7 +261,13 @@ que cada etapa possa ser reexecutada isoladamente quando algo precisa de ajuste.
 | Motor de regras | 18 `SELECT` em `UNION ALL` sobre a Silver | Converte catálogo em achado acionável | 589 achados, score 2.809 |
 | Score de risco | `peso × 3` (sensível), `× 2` (pessoal), `× 1` | Prioriza o que é regulatoriamente crítico | Ordena o backlog |
 
-`SCREENSHOT: Catalog Explorer com as tabelas persistidas nos três schemas`
+![`dim_regra`: as 18 regras com severidade e categoria OWASP](evidencias/09_dim_regra.png)
+
+*`dim_regra`: as 18 regras com severidade e categoria OWASP*
+
+![`backlog_remediacao`: achados ordenados por risco](evidencias/10_backlog.png)
+
+*`backlog_remediacao`: achados ordenados por risco*
 
 ---
 
@@ -264,7 +285,7 @@ Perfilamento feito **antes** de qualquer limpeza — medir depois não prova nad
 | 5 | Grants duplicados por herança de role | Unicidade | `dropDuplicates` com contagem prévia | 3.826 linhas, **0 duplicatas** |
 | 5b | 30 repetições em `funcoes` pela chave `(schema, nome)` | Unicidade | **não deduplicadas** — são overloads, ver nota | 195 linhas, 165 nomes distintos |
 | 6 | Schemas do Supabase misturados aos da aplicação | Escopo | flag `dominio`, mantidos como comparação | 2 schemas / 79 objetos da aplicação vs 8 schemas / 54 objetos do Supabase |
-| 7 | Falso positivo e falso negativo do classificador LGPD | Acurácia | amostra de 40 colunas rotulada à mão | precisão `PREENCHER` · recall `PREENCHER` |
+| 7 | Falso positivo e falso negativo do classificador LGPD | Acurácia | amostra de 40 colunas rotulada à mão | precisão **73,3%** · recall **73,3%** |
 
 **Sobre o item 1.** O explode não multiplicou linhas: cada política do Pitaia é concedida a
 exatamente uma role, então 209 políticas produziram 209 pares política × role. A
@@ -286,18 +307,59 @@ já é única por tupla role × objeto × privilégio. A verificação foi execu
 negativo está documentado em `silver.perfil_duplicatas`, conforme o enunciado pede para bases
 que se mostram limpas.
 
-Sobre o item 7: uma heurística de regex sobre nome de coluna erra nos dois sentidos. Em vez
-de apresentá-la como exata, 40 colunas foram amostradas e rotuladas manualmente para
-estimar precisão e recall. `PREENCHER — comente dois exemplos concretos de erro.`
+**Sobre o item 7.** Uma heurística sobre nomenclatura erra nos dois sentidos, e apresentá-la
+como exata seria desonesto. Quarenta colunas dos schemas expostos foram amostradas por hash
+estável — não por `rand()`, para que a amostra seja reproduzível — e rotuladas manualmente.
 
-`SCREENSHOT: perfil_qualidade ordenado por pct_nulo · perfil_duplicatas`
+| | classificador diz que É | classificador diz que NÃO É |
+|---|---|---|
+| **é dado pessoal** | VP = 11 | FN = 4 |
+| **não é** | FP = 4 | VN = 21 |
+
+**Precisão 73,3% · Recall 73,3%.** Em 40 colunas, oito discordâncias.
+
+Os erros não são aleatórios, seguem dois padrões.
+
+**Falsos positivos — a herança de tabela alcança metadado.** `nutrition_plans.name` foi
+classificado como `nome_pessoa`, mas é o nome do *plano alimentar*, não de uma pessoa: o padrão
+`^name$` é genérico demais. `email_send_state.auth_email_ttl_minutes` virou `email` por conter
+a palavra, sendo um parâmetro de expiração. `invite_links.link_type` e
+`assigned_questionnaires.scheduled_date` herdaram a classe da tabela sendo campos de controle
+que o filtro de colunas técnicas não alcança — ele cobre `created_at` e sufixos `_id`, mas não
+`*_type` nem `scheduled_*`.
+
+**Falsos negativos — dado sensível com nome neutro.** O mais grave é
+`profiles.cycle_length_days`: duração do ciclo menstrual, dado de saúde sensível pelo art. 5º,
+II, invisível para a heurística porque nem o nome da tabela (`profiles`) nem o da coluna casam
+com qualquer padrão clínico. `patient_custom_field_values.value` é campo customizado de
+paciente e pode conter qualquer coisa, inclusive dado clínico. `access_audit_events.device_id`
+identifica o dispositivo do usuário. `email_send_log.metadata` é um JSON que pode carregar
+destinatário.
+
+O padrão é consistente: **a heurística acerta onde o dado é estruturado e nomeado por
+convenção, e erra onde ele é livre ou onde o nome não descreve o conteúdo.** É o limite de
+classificar dado sensível por nomenclatura, e é a razão de o número ter sido medido em vez de
+assumido.
+
+![Perfil de qualidade por atributo, medido na Bronze antes da limpeza](evidencias/03_perfil_qualidade.png)
+
+*Perfil de qualidade por atributo, medido na Bronze antes da limpeza*
+
+![Duplicatas por chave natural — as 30 de `funcoes` são os overloads](evidencias/04_perfil_duplicatas.png)
+
+*Duplicatas por chave natural — as 30 de `funcoes` são os overloads*
+
+![Distribuição das classes de dado pessoal e origem da classificação](evidencias/05_classe_dado.png)
+
+*Distribuição das classes de dado pessoal e origem da classificação*
 
 ---
 
 ## Análise de Dados (Etapa 4.5)
 
-`Para cada pergunta: screenshot do resultado + 2–3 frases de interpretação. O notebook 04
-traz, no markdown de cada célula, como ler o resultado e que frase escrever.`
+![Os quatro números que resumem a auditoria](evidencias/00_indicadores.png)
+
+*Os quatro números que resumem a auditoria*
 
 ### P1 — Proporção de tabelas expostas sem RLS
 
@@ -318,7 +380,9 @@ falha indica que habilitar RLS foi tratado como padrão do projeto, não como ex
 caso a caso. Reportar ausência de falha com número é tão válido quanto reportar falha, e é o
 que separa uma auditoria de uma lista de reclamações.
 
-`SCREENSHOT`
+![Resultado da P1](evidencias/p1.png)
+
+*Resultado da P1*
 
 ### P2 — RLS habilitado com zero políticas
 
@@ -347,7 +411,9 @@ princípio de *fail-safe defaults*, um dos oito que Saltzer e Schroeder formular
 sistema falhou do lado certo — quebra funcionalidade, não vaza dado. O custo provável é uma
 funcionalidade do Pitaia que não responde e cuja causa ninguém associou ao RLS.
 
-`SCREENSHOT`
+![Resultado da P2](evidencias/p2.png)
+
+*Resultado da P2*
 
 ### P3 — Políticas com isolamento real
 
@@ -379,7 +445,9 @@ mecanismo*, também de Saltzer e Schroeder, e a formulação mais direta de Bruc
 complexidade é o pior inimigo da segurança. Não é que cada política esteja errada; é que o
 volume torna improvável que todas estejam certas.
 
-`SCREENSHOT`
+![Resultado da P3](evidencias/p3.png)
+
+*Resultado da P3*
 
 ### P4 — Escrita disponível à role anônima
 
@@ -402,7 +470,9 @@ modelo de Clark e Wilson (1987). A maioria das auditorias examina apenas leitura
 um sistema de saúde, escrita indevida permite inserir registro falso no prontuário de
 alguém — e o impacto disso pode superar o de um vazamento.
 
-`SCREENSHOT`
+![Resultado da P4](evidencias/p4.png)
+
+*Resultado da P4*
 
 ### P5 — Concentração de risco por schema
 
@@ -425,7 +495,13 @@ gerenciados pelo Supabase dá a escala correta: `auth`, mantido pela própria pl
 supostamente exemplar, registra 4,2 achados por objeto. A diferença é real, e não é
 catastrófica.
 
-`SCREENSHOT`
+![Resultado da P5](evidencias/p5.png)
+
+*Resultado da P5*
+
+![Achados por schema e severidade](evidencias/03_heatmap_schema.png)
+
+*Achados por schema e severidade*
 
 ### P6 — Distribuição pelo OWASP Top 10:2025
 
@@ -445,7 +521,13 @@ dados — e os 182 achados de A02 aqui, ainda que de baixa severidade, ilustram 
 de uma única aplicação. E **A03 Software Supply Chain Failures é categoria nova**; os dois
 achados de extensão instalada fora do schema `extensions` caem exatamente nela.
 
-`SCREENSHOT`
+![Resultado da P6](evidencias/p6.png)
+
+*Resultado da P6*
+
+![Score de risco por categoria do OWASP Top 10:2025](evidencias/01_owasp.png)
+
+*Score de risco por categoria do OWASP Top 10:2025*
 
 ### P7 — Colunas com dado de saúde sem proteção
 
@@ -469,7 +551,13 @@ Solove (2006), ele cobre **exposure** — a revelação direta. Não cobre **agg
 prontuários distintos um mesmo perfil consegue percorrer em sequência, ainda que cada acesso
 individual seja legítimo. Essa dimensão não foi medida e permanece em aberto.
 
-`SCREENSHOT`
+![Resultado da P7](evidencias/p7.png)
+
+*Resultado da P7*
+
+![Exposição por classe de dado pessoal — a ausência de barras vermelhas é o resultado](evidencias/02_exposicao_lgpd.png)
+
+*Exposição por classe de dado pessoal — a ausência de barras vermelhas é o resultado*
 
 ### P8 — Isolamento de prontuário entre pacientes
 
@@ -511,7 +599,13 @@ PostgREST com um JWT válido contorna o front-end inteiro. Na formulação do NI
 sobre Zero Trust, o ponto de aplicação de política precisa estar junto ao dado, não na
 interface que o consome.
 
-`SCREENSHOT`
+![Resultado da P8](evidencias/p8.png)
+
+*Resultado da P8*
+
+![Backlog de remediação: os oito defeitos reais no topo](evidencias/04_backlog.png)
+
+*Backlog de remediação: os oito defeitos reais no topo*
 
 ### Discussão geral
 
@@ -570,7 +664,7 @@ possibilidade, não o exercício dela. Por outro lado, é precisamente essa a ra
 RLS: confiar no filtro da interface é o que o princípio de mediação completa proíbe.
 
 **Classificação por nomenclatura, não por conteúdo.** O classificador lê nomes de tabela e de
-coluna. Mediu-se precisão de `PREENCHER`% e recall de `PREENCHER`% numa amostra de 40 colunas
+coluna. Mediu-se **precisão de 73,3% e recall de 73,3%** numa amostra de 40 colunas
 rotuladas manualmente, e os erros seguem um padrão sistemático nas bordas — colunas de
 controle dentro de tabelas clínicas herdam classificação indevida, e texto livre em tabelas de
 nome neutro escapa. Uma classificação por amostragem de conteúdo seria mais precisa e é um
