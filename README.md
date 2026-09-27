@@ -638,11 +638,31 @@ escrita é intuitivo, porque ninguém quer que outro usuário altere seus dados.
 exige pensar no cenário em que alguém *consulta* dado alheio, que é menos imediato e,
 num sistema de saúde, mais grave.
 
-**O que o backlog manda fazer, nesta ordem.** As 4 funções `SECURITY DEFINER` sem
-`search_path` vêm primeiro: são vetor de escalada de privilégio, executam com o privilégio do
-criador e contornam RLS inteiramente. Depois os 2 buckets públicos, verificando antes se
-armazenam arquivos de paciente. Em terceiro, as 2 tabelas de saúde sem isolamento. As 25
-tabelas com RLS e zero políticas entram em seguida, como correção de funcionalidade.
+**As vulnerabilidades identificadas e o output gerado.** O pipeline detectou 579 achados,
+destilou os que exigem ação e entregou a ordem de correção abaixo, materializada na tabela
+`gold.backlog_remediacao`. É este o produto do trabalho: não uma lista de alertas, mas uma
+fila de trabalho.
+
+| # | Vulnerabilidade | Sev. | OWASP | Qtd | Correção |
+|---|---|---|---|---|---|
+| **1** | Função `SECURITY DEFINER` sem `search_path` fixado | Crítico | A02 | **4** | Adicionar `SET search_path = ''` e mover a função para schema privado |
+| **2** | Bucket de Storage com leitura anônima | Crítico | A02 | **2** | Verificar se guarda arquivo de paciente e tornar privado |
+| **3** | Tabela com dado de saúde legível por qualquer conta autenticada | Crítico | A01 | **2** | Acrescentar filtro por `auth.uid()` ou coluna de tenant na política |
+| **4** | RLS habilitado sem nenhuma política, no schema da aplicação | Alto | A06 | **1** | Criar a política ausente; hoje a tabela nega todo acesso |
+| **5** | Política de `SELECT` sem isolamento por usuário | Alto | A01 | **9** | Revisar caso a caso e amarrar a linha ao titular |
+| **6** | Política `USING(true)` para `authenticated` | Alto | A01 | **1** | Restringir a expressão ou confirmar que o dado é público por decisão |
+| **7** | Políticas não cobrem todos os comandos da tabela | Médio | A06 | **21** | Completar a cobertura ou declarar `ALL` |
+| **8** | Tabela sem chave primária | Médio | A08 | **3** | Definir PK |
+| **9** | Extensão instalada fora do schema `extensions` | Médio | A03 | **2** | Mover, reduzindo superfície de cadeia de suprimentos |
+| **10** | RLS habilitado mas não forçado para o owner | Baixo | A02 | **97** | Aplicar `FORCE ROW LEVEL SECURITY` onde couber |
+| **11** | Objeto sem `COMMENT` no catálogo | Baixo | A02 | **79** | Documentar |
+
+Os três primeiros itens são os que mudam a exposição real e somam **oito ocorrências**. Os
+quatro funções `SECURITY DEFINER` vêm à frente das tabelas de saúde por um motivo de
+precedência: elas executam com o privilégio do criador e **contornam o RLS inteiramente**,
+então corrigi-las é pré-condição para que qualquer política de linha signifique alguma coisa.
+Os itens 10 e 11, embora somem 176 ocorrências, são de severidade baixa e não alteram quem
+alcança o quê.
 
 **O que a comparação contextualiza.** O schema da aplicação registra 33,3 pontos de risco por
 objeto contra 4,2 do schema `auth`, mantido pela própria Supabase. A diferença é real, mas o
