@@ -657,7 +657,7 @@ fila de trabalho.
 | **10** | RLS habilitado mas não forçado para o owner | Baixo | A02 | **97** | Aplicar `FORCE ROW LEVEL SECURITY` onde couber |
 | **11** | Objeto sem `COMMENT` no catálogo | Baixo | A02 | **79** | Documentar |
 
-Os três primeiros itens são os que mudam a exposição real e somam **oito ocorrências**. Os
+Os três primeiros itens são os que mudam a exposição real e somam **oito ocorrências**. As
 quatro funções `SECURITY DEFINER` vêm à frente das tabelas de saúde por um motivo de
 precedência: elas executam com o privilégio do criador e **contornam o RLS inteiramente**,
 então corrigi-las é pré-condição para que qualquer política de linha signifique alguma coisa.
