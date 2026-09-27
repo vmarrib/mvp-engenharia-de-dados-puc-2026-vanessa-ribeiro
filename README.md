@@ -698,28 +698,51 @@ uma limitação: o pipeline não roda sozinho amanhã.
 
 ### Dificuldades encontradas
 
-A maior não foi técnica, foi de escopo. O tema deste MVP mudou três vezes antes de
-estabilizar, e as duas primeiras ideias falhavam pelo mesmo motivo: eu partia de um dado
-interessante em vez de partir de uma pergunta. Quando o ponto de partida virou *"o que eu
-preciso decidir?"*, o resto — fonte, modelo, análise — se ordenou sozinho. É exatamente o que
-o enunciado adverte na etapa de objetivo, e eu precisei errar duas vezes para entender.
+**Decidir o que conta como um achado.** Foi a decisão mais difícil do trabalho, e não é
+técnica. A regra R08 dispara 294 vezes; a R16, 39. Um relatório que somasse isso apontaria 333
+problemas de privilégio anônimo numa aplicação que, medida de outra forma, tem oito defeitos.
+Entender que o Supabase concede `GRANT` amplo a `anon` e `authenticated` **por arquitetura**,
+delegando a proteção ao RLS, exigiu ler o modelo de segurança da plataforma com profundidade
+suficiente para distinguir característica de defeito. O `score_ajustado` nasceu daí. Sem essa
+distinção o pipeline produziria 579 alarmes e nenhum diagnóstico — e estaria tecnicamente
+correto ao fazê-lo, o que é o pior tipo de erro.
 
-Tecnicamente, três problemas tomaram tempo real. O mais instrutivo foi o do
-`information_schema`: uma consulta correta em sintaxe, executada sem erro, devolvendo dados
-incompletos por causa de uma regra de visibilidade que eu não conhecia. Descobri porque as
-contagens não bateram entre a tela e o arquivo — sem essa conferência, teria concluído que a
-aplicação não tinha nenhum problema de privilégio anônimo.
+**Conciliar granularidades heterogêneas numa única fato.** As 18 regras não observam a mesma
+coisa. A R04 é por função, a R05 por bucket, a R15 por coluna, a R08 por role × objeto, a R12
+por extensão. Forçar tudo numa `fato_achado` significou aceitar chaves estrangeiras nulas —
+um achado de bucket não tem `sk_coluna`, um de tabela sem PK não tem `sk_role` — e declarar
+isso explicitamente no catálogo. A alternativa, uma fato por tipo de regra, preservaria a
+pureza do modelo e destruiria a capacidade de somar risco entre categorias, que é justamente
+o que o backlog precisa fazer. Escolhi a fato única sabendo do custo.
 
-O segundo foi o dos *overloads*: o perfil de duplicatas acusou 30 repetições em `funcoes` e
-meu pipeline as descartava. Eram assinaturas distintas da mesma função, cada uma com suas
-próprias flags de segurança. A deduplicação ingênua poderia ter escondido uma função
-`SECURITY DEFINER` vulnerável — falso negativo numa regra crítica, que é o pior desfecho
-possível de uma auditoria, porque afirma uma segurança que não existe. Foi o momento em que
-**medir a qualidade dos dados corrigiu a modelagem**, e não o contrário.
+**O limite entre medir e julgar.** O pipeline mede estrutura: quais colunas existem, quais
+políticas as protegem. Mas classificar dado de saúde exige decisões que a estrutura não
+carrega. Peso e altura são dado de saúde? Isoladamente, não; dentro de uma plataforma clínica
+com médico e educador físico acessando, sim — classifiquei pelo contexto de tratamento, não
+pelo nome do campo. E o caso inverso apareceu na rotulação manual: `checkins.training_type` é
+tecnicamente dado de saúde, mas é o check-in que o próprio usuário torna público. **O
+consentimento muda a classificação, e nenhum esquema de banco carrega a base legal.** Foi onde
+ficou claro que existe um teto para o que auditoria automatizada alcança.
 
-O terceiro foi menos dramático e igualmente útil: `input_file_name()` bloqueada pelo Unity
-Catalog e aspas simples quebrando `COMMENT`. Ambos são atritos que só existem dentro de um
-ambiente governado, e que não aparecem rodando Spark solto.
+**Resistir a ajustar as regras até encontrarem algo.** Cinco das 18 — R01, R02, R03, R07 e
+R15 — terminaram com zero achados. A tentação de relaxar os critérios para que "produzissem
+resultado" foi real, porque um relatório com regras vazias parece incompleto. Mantê-las e
+reportar o zero acabou sendo a informação mais forte do trabalho: nenhuma tabela exposta sem
+RLS e nenhuma coluna de dado de saúde desprotegida. **Resultado negativo medido vale tanto
+quanto achado**, mas só se a régua não tiver sido movida depois de ver os dados.
+
+**Três atritos técnicos que custaram tempo real.** O mais instrutivo foi o do
+`information_schema`: uma consulta sintaticamente correta, executada sem erro, devolvendo
+dados incompletos por uma regra de visibilidade que eu não conhecia. Descobri porque as
+contagens não bateram entre a tela e o arquivo exportado — sem essa conferência trivial, teria
+concluído que a aplicação não tinha nenhum problema de privilégio anônimo. O segundo foi o dos
+*overloads*: o perfil de duplicatas acusou 30 repetições em `funcoes` e o pipeline as
+descartava; eram assinaturas distintas da mesma função, cada uma com suas próprias flags, e a
+deduplicação ingênua poderia ter escondido um `SECURITY DEFINER` vulnerável. Foi o momento em
+que **medir a qualidade dos dados corrigiu a modelagem**, e não o contrário. O terceiro,
+menor: `input_file_name()` bloqueada pelo Unity Catalog e aspas simples quebrando o literal de
+`COMMENT` — atritos que só existem dentro de um ambiente governado e não aparecem rodando
+Spark solto.
 
 ### Trabalhos futuros
 
