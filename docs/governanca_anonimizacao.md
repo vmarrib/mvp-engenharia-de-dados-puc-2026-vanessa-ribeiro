@@ -3,7 +3,7 @@
 ## Por que este documento existe
 
 Este MVP audita uma aplicação **em produção**, com usuários reais, e o código está
-em um repositório **público** — exigência do item 3 do enunciado. Essas duas coisas
+em um repositório **público**, exigência do item 3 do enunciado. Essas duas coisas
 juntas criam um risco que a maioria dos trabalhos não enfrenta: um relatório de
 vulnerabilidades publicado abertamente é um mapa de ataque.
 

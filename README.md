@@ -1,6 +1,6 @@
-# MVP de Engenharia de Dados — Auditoria de Postura de Segurança da Plataforma Pitaia
+# MVP de Engenharia de Dados: Auditoria de Postura de Segurança da Plataforma Pitaia
 
-**Vanessa Ribeiro** · Pós-graduação PUC-Rio · Sprint de Engenharia de Dados
+**Vanessa Ribeiro**, Pós-graduação PUC-Rio, Sprint de Engenharia de Dados
 
 > Pipeline de dados em nuvem que coleta o catálogo de segurança de uma plataforma de
 > saúde em produção, modela os achados em esquema estrela e entrega um **backlog de
@@ -8,11 +8,11 @@
 
 | | |
 |---|---|
-| **Plataforma de nuvem** | Databricks Free Edition — serverless, Unity Catalog, Delta Lake |
+| **Plataforma de nuvem** | Databricks Free Edition, serverless, Unity Catalog, Delta Lake |
 | **Arquitetura** | Medalhão: Bronze → Silver → Gold |
 | **Fonte** | Catálogo do PostgreSQL do projeto Supabase da plataforma Pitaia (apitaia.com) |
 | **Snapshot** | 26 de setembro de 2026 |
-| **Referenciais** | OWASP Top 10:2025 · LGPD Lei 13.709/2018, arts. 5º, 11 e 46 |
+| **Referenciais** | OWASP Top 10:2025 e LGPD Lei 13.709/2018, arts. 5º, 11 e 46 |
 
 ```
 extracao/00_queries_supabase.sql        8 extrações via SQL Editor do Supabase
@@ -27,10 +27,13 @@ docs/catalogo_de_dados.md               catálogo de dados transcrito
 evidencias/                             23 screenshots e figuras da execução
 ```
 
-> Os arquivos em `apresentacao/` são **exportações dos notebooks executados no Databricks
-> Free Edition**, incluídas para que as saídas possam ser lidas diretamente no GitHub, que
-> renderiza `.ipynb` de forma nativa. O pipeline não foi executado em Google Colab — toda a
-> execução ocorreu na plataforma de nuvem, conforme o item 2 do enunciado.
+> Os arquivos em `apresentacao/` são exportações dos notebooks executados no Databricks Free
+> Edition, incluídas para que as saídas possam ser lidas diretamente no GitHub, que renderiza
+> `.ipynb` de forma nativa. Em `01`, `02` e `03` as saídas vieram completas; em `04` e `05`
+> apenas o código, porque a exportação preserva o retorno de `print()` mas não o de células
+> SQL nem o de `display()` e `plt.show()`, que a interface da plataforma renderiza sem gravar
+> no formato `nbformat`. Os resultados dessas duas etapas estão em `evidencias/`, referenciados
+> ao longo deste documento.
 
 ---
 
@@ -41,7 +44,7 @@ evidencias/                             23 screenshots e figuras da execução
 O **Pitaia** (apitaia.com) é um sistema de inteligência de saúde pessoal. Ele consolida,
 num só lugar, dados que hoje vivem espalhados: histórico clínico, exames, medicações,
 informações pessoais e métricas corporais. O acesso é compartilhado por três perfis
-distintos — **o próprio usuário, médicos e educadores físicos** — cada um devendo alcançar
+distintos (**o próprio usuário, médicos e educadores físicos**), cada um devendo alcançar
 apenas a fração de informação pertinente ao seu papel.
 
 Essa arquitetura de acesso é o que torna a plataforma útil e, ao mesmo tempo, o que
@@ -51,8 +54,7 @@ proporcionais ao risco (art. 46). Um defeito de isolamento entre pacientes aqui 
 dívida técnica: é incidente de dados sensíveis.
 
 O Pitaia foi construído com apoio de geração assistida de código sobre Supabase. Esse modo
-de construção acelera a entrega, mas desloca as decisões de segurança — sobretudo as
-políticas de *Row Level Security* — para configuração implícita, distribuída entre
+de construção acelera a entrega, mas desloca as decisões de segurança (sobretudo as políticas de *Row Level Security*) para configuração implícita, distribuída entre
 migrações e raramente auditada de forma sistemática. O resultado típico é uma aplicação
 que funciona e cuja postura de segurança ninguém mediu.
 
@@ -60,7 +62,7 @@ que funciona e cuja postura de segurança ninguém mediu.
 
 > **Medir a postura de segurança e a superfície de exposição de dados de saúde da
 > plataforma Pitaia, transformando o catálogo do banco em um backlog de remediação
-> priorizado por risco — em vez de uma lista desordenada de alertas.**
+> priorizado por risco, em vez de uma lista desordenada de alertas.**
 
 A decisão de negócio que o pipeline precisa sustentar é concreta: *o que corrigir primeiro,
 com tempo limitado de desenvolvimento.*
@@ -70,31 +72,29 @@ com tempo limitado de desenvolvimento.*
 | # | Pergunta | Respondida? |
 |---|---|---|
 | **P1** | Que proporção das tabelas expostas via API está sem RLS? | ✅ Sim |
-| **P2** | Quantas tabelas têm RLS habilitado mas **zero políticas** — protegidas na aparência, quebradas na prática? | ✅ Sim |
+| **P2** | Quantas tabelas têm RLS habilitado mas **zero políticas**, protegidas na aparência, quebradas na prática? | ✅ Sim |
 | **P3** | Das políticas existentes, quantas isolam de fato por usuário ou tenant? | ✅ Sim |
 | **P4** | O que a role anônima consegue **escrever**? | ✅ Sim |
-| **P5** | Onde o risco está concentrado — qual schema tem a pior densidade de achados? | ✅ Sim |
+| **P5** | Onde o risco está concentrado, qual schema tem a pior densidade de achados? | ✅ Sim |
 | **P6** | Como os achados se distribuem pelas categorias do OWASP Top 10:2025? | ✅ Sim |
 | **P7** | **Quantas colunas com dado de saúde estão sem proteção de linha?** (conformidade LGPD art. 11) | ✅ Sim |
 | **P8** | **Um usuário autenticado qualquer consegue ler o prontuário de outro paciente?** | ✅ Sim |
 
 P7 e P8 são as perguntas-âncora: as duas que um titular de dados faria se pudesse.
-Conforme o enunciado, nenhuma pergunta foi removida — o que não foi respondido está
+Conforme o enunciado, nenhuma pergunta foi removida. O que não foi respondido está
 discutido na Autoavaliação.
 
 ### Estrutura dos dados brutos
 
-Oito extrações do catálogo do PostgreSQL. **Nenhum dado de paciente foi coletado** —
-somente metadados de estrutura e permissão.
+Oito extrações do catálogo do PostgreSQL. **Nenhum dado de paciente foi coletado**, somente metadados de estrutura e permissão.
 
 Três das oito consultas foram reescritas durante a coleta. As versões iniciais usavam
 `information_schema`, cujas views são **filtradas por privilégio**: só retornam o que a role
-de execução enxerga. Na prática isso devolveu 164 linhas de grants — todas de uma única role
-de sandbox — em vez da ACL real do banco, o que zeraria silenciosamente as regras de
+de execução enxerga. Na prática isso devolveu 164 linhas de grants (todas de uma única role de sandbox) em vez da ACL real do banco, o que zeraria silenciosamente as regras de
 privilégio anônimo. As versões finais leem `pg_attribute`, `aclexplode(pg_class.relacl)` e
 `pg_constraint`, que não sofrem esse filtro. Está registrado aqui porque é uma armadilha
 real de coleta, não um detalhe de implementação: a consulta *funcionava* e devolvia dados
-plausíveis — só que incompletos.
+plausíveis, só que incompletos.
 
 | Arquivo | Origem no PostgreSQL | Granularidade | Linhas |
 |---|---|---|---|
@@ -120,12 +120,11 @@ Quatro medidas foram aplicadas:
 
 1. **Nenhum dado de paciente foi ingerido.** A auditoria opera sobre a *estrutura* do banco.
    `auth.users` e todas as tabelas de conteúdo clínico ficaram fora do escopo.
-2. **Identificadores anonimizados** antes de qualquer publicação — schemas, tabelas e
+2. **Identificadores anonimizados** antes de qualquer publicação: schemas, tabelas e
    colunas viraram `app_s1`, `t_001`, `c_a1b2c3d4`. O mapa reverso não foi versionado.
 3. **Nenhuma credencial saiu do Supabase.** A coleta ocorreu dentro do painel, com
    exportação manual em CSV.
-4. **Nenhum corpo de função e nenhuma expressão literal de política** foi coletado — apenas
-   flags derivadas.
+4. **Nenhum corpo de função e nenhuma expressão literal de política** foi coletado, apenas flags derivadas.
 
 Detalhamento em [`docs/governanca_anonimizacao.md`](docs/governanca_anonimizacao.md).
 
@@ -146,8 +145,7 @@ ganho de automatizar uma coleta que roda uma vez. O custo assumido é que a cole
 agendável, e isso está registrado em trabalhos futuros.
 
 **Correção durante a coleta.** As três primeiras versões das consultas de colunas, grants e
-constraints usavam `information_schema`. Os arquivos chegaram plausíveis — a de grants trouxe
-164 linhas bem formadas — mas incompletos: as views do `information_schema` são **filtradas
+constraints usavam `information_schema`. Os arquivos chegaram plausíveis (a de grants trouxe 164 linhas bem formadas), mas incompletos: as views do `information_schema` são **filtradas
 por privilégio** e retornam apenas o que a role de execução enxerga. No SQL Editor isso
 significou a ACL de uma única role de sandbox em vez das 5.707 linhas reais, o que zeraria em
 silêncio as regras de privilégio anônimo. As versões finais leem `pg_attribute`,
@@ -159,12 +157,11 @@ e produz uma conclusão errada.
 pela interface do Catalog Explorer, e lidos pelo notebook
 [`01_bronze_ingestao.py`](notebooks/01_bronze_ingestao.py), que grava as oito tabelas Delta da
 camada Bronze. Duas restrições do ambiente governado apareceram nessa etapa: `input_file_name()`
-é bloqueada pelo Unity Catalog, porque expor caminho físico de arquivo contorna a camada de
-governança — a alternativa suportada é a coluna oculta `_metadata.file_path`; e aspas simples
+é bloqueada pelo Unity Catalog, porque expor caminho físico de arquivo contorna a camada de governança, e a alternativa suportada é a coluna oculta `_metadata.file_path`; e aspas simples
 dentro do texto de um `COMMENT` quebram o literal SQL, o que exigiu escape explícito. Nenhuma
 das duas aparece rodando Spark fora de um catálogo.
 
-**Scripts:** [`extracao/00_queries_supabase.sql`](extracao/00_queries_supabase.sql) ·
+**Scripts:** [`extracao/00_queries_supabase.sql`](extracao/00_queries_supabase.sql) e
 [`notebooks/01_bronze_ingestao.py`](notebooks/01_bronze_ingestao.py)
 
 Três decisões de projeto na camada Bronze:
@@ -200,7 +197,7 @@ Três decisões de projeto na camada Bronze:
             dim_coluna     dim_role        dim_politica
 ```
 
-**Granularidade do fato:** um achado de segurança — uma regra violada por um objeto
+**Granularidade do fato:** um achado de segurança, uma regra violada por um objeto
 (opcionalmente por coluna ou role) em um snapshot.
 
 Duas escolhas de modelagem que vale explicar:
@@ -208,7 +205,7 @@ Duas escolhas de modelagem que vale explicar:
 **`dim_regra` é curada manualmente.** As 18 regras, sua severidade, seu peso numérico e sua
 categoria no OWASP Top 10:2025 vivem como uma dimensão do modelo. Isso faz com que o
 referencial de segurança seja consultável por SQL, em vez de existir apenas como prosa no
-relatório — dá para perguntar "qual categoria do OWASP concentra meu risco?" com um
+relatório. Dá para perguntar "qual categoria do OWASP concentra meu risco?" com um
 `GROUP BY`.
 
 **Quatro das 18 regras são específicas de dado de saúde** (R15–R18). Elas existem porque o
@@ -250,7 +247,7 @@ cobertura: 107 de 107, 100%. Se alguma ficasse sem descrição, seria impressa p
 
 ## Pipeline de Dados (Etapa 4.4)
 
-Ramificado em **cinco notebooks**, um por responsabilidade — não em um notebook único, para
+Ramificado em **cinco notebooks**, um por responsabilidade, não em um notebook único, para
 que cada etapa possa ser reexecutada isoladamente quando algo precisa de ajuste.
 
 | Notebook | Responsabilidade | Entrada → Saída |
@@ -285,7 +282,7 @@ que cada etapa possa ser reexecutada isoladamente quando algo precisa de ajuste.
 
 ## Qualidade de Dados (Etapa 4.5)
 
-Perfilamento feito **antes** de qualquer limpeza — medir depois não prova nada. Evidência em
+Perfilamento feito **antes** de qualquer limpeza, porque medir depois não prova nada. Evidência em
 `silver.perfil_qualidade` e `silver.perfil_duplicatas`.
 
 | # | Problema detectado | Dimensão | Tratamento | Volume |
@@ -295,20 +292,20 @@ Perfilamento feito **antes** de qualquer limpeza — medir depois não prova nad
 | 3 | Booleanos em formatos mistos | Consistência | normalização para boolean | todas as flags |
 | 4 | Views presentes em `colunas` mas sem RLS aplicável | Acurácia | separação por `tipo_objeto`, regra própria (R07) | 3 views, 60 colunas |
 | 5 | Grants duplicados por herança de role | Unicidade | `dropDuplicates` com contagem prévia | 3.826 linhas, **0 duplicatas** |
-| 5b | 30 repetições em `funcoes` pela chave `(schema, nome)` | Unicidade | **não deduplicadas** — são overloads, ver nota | 195 linhas, 165 nomes distintos |
+| 5b | 30 repetições em `funcoes` pela chave `(schema, nome)` | Unicidade | **não deduplicadas**, são overloads, ver nota | 195 linhas, 165 nomes distintos |
 | 6 | Schemas do Supabase misturados aos da aplicação | Escopo | flag `dominio`, mantidos como comparação | 2 schemas / 79 objetos da aplicação vs 8 schemas / 54 objetos do Supabase |
-| 7 | Falso positivo e falso negativo do classificador LGPD | Acurácia | amostra de 40 colunas rotulada à mão | precisão **80,0%** · recall **50,0%** |
+| 7 | Falso positivo e falso negativo do classificador LGPD | Acurácia | amostra de 40 colunas rotulada à mão | precisão **80,0%** e recall **50,0%** |
 
 **Sobre o item 1.** O explode não multiplicou linhas: cada política do Pitaia é concedida a
 exatamente uma role, então 209 políticas produziram 209 pares política × role. A
-transformação continua necessária — sem ela o campo `roles` é um texto não consultável — mas
+transformação continua necessária (sem ela o campo `roles` é um texto não consultável), mas
 o impacto em volume foi nulo. Registro porque o resultado esperado era outro.
 
-**Sobre o item 5b — o achado que mudou a modelagem.** O perfil de duplicatas acusou 30
+**Sobre o item 5b, o achado que mudou a modelagem.** O perfil de duplicatas acusou 30
 repetições em `funcoes` pela chave `(schema_nome, funcao)`. Investigadas, são **funções
 sobrecarregadas** do PostgreSQL: mesmo nome, assinaturas distintas, cada uma com suas
 próprias flags de segurança. A deduplicação ingênua, que era o que o pipeline fazia, teria
-descartado 30 linhas — e se qualquer uma delas fosse `SECURITY DEFINER` sem `search_path`, a
+descartado 30 linhas, e se qualquer uma delas fosse `SECURITY DEFINER` sem `search_path`, a
 regra R04 perderia o achado em silêncio. Falso negativo numa regra crítica é o pior
 resultado possível numa auditoria: ela reporta segurança que não existe. A chave natural
 correta dessa tabela não é o nome da função, e por isso ela deixou de ser deduplicada. É o
@@ -320,14 +317,12 @@ negativo está documentado em `silver.perfil_duplicatas`, conforme o enunciado p
 que se mostram limpas.
 
 **Sobre o item 7.** Uma heurística sobre nomenclatura erra nos dois sentidos, e apresentá-la
-como exata seria desonesto. Quarenta colunas dos schemas expostos foram amostradas por hash
-estável — não por `rand()`, para que a amostra seja reproduzível — e rotuladas manualmente.
+como exata seria desonesto. Quarenta colunas dos schemas expostos foram amostradas por hash estável (não por `rand()`, para que a amostra seja reproduzível) e rotuladas manualmente.
 
 **O critério de rotulação precisa ser declarado**, porque ele determina o resultado. Adotei a
 definição ampla do art. 5º, I da LGPD: *dado pessoal é toda informação relacionada a pessoa
-identificada ou identificável*. Na prática, tudo que é informação do usuário conta — inclusive
-identificadores como `user_id` e marcas de atividade como `created_at` de um registro dele —
-**exceto o que o próprio usuário optou por tornar público**, que no Pitaia é o check-in de
+identificada ou identificável*. Na prática, tudo que é informação do usuário conta, inclusive
+identificadores como `user_id` e marcas de atividade como `created_at` de um registro dele, **exceto o que o próprio usuário optou por tornar público**, que no Pitaia é o check-in de
 treino compartilhado.
 
 | | classificador diz que É | classificador diz que NÃO É |
@@ -335,17 +330,16 @@ treino compartilhado.
 | **é dado pessoal** | VP = 12 | FN = 12 |
 | **não é** | FP = 3 | VN = 13 |
 
-**Precisão 80,0% · Recall 50,0%.**
+**Precisão de 80,0% e recall de 50,0%.**
 
-A assimetria é o achado. O classificador é **confiável quando acusa** — 4 em cada 5 acertos —
-mas **encontra apenas metade** do que existe. Para uma auditoria de conformidade isso é a pior
+A assimetria é o achado. O classificador é **confiável quando acusa** (4 em cada 5 acertos), mas **encontra apenas metade** do que existe. Para uma auditoria de conformidade isso é a pior
 combinação possível: um relatório baseado nele subestimaria sistematicamente a superfície de
 dado pessoal, e o faria com aparência de precisão.
 
 Os erros seguem três padrões distintos.
 
 **Falsos negativos por nome neutro (o grupo maior).** `profiles.cycle_length_days` é duração do
-ciclo menstrual — dado de saúde sensível pelo art. 5º, II — invisível porque nem `profiles` nem
+ciclo menstrual, dado de saúde sensível pelo art. 5º, II, invisível porque nem `profiles` nem
 o nome da coluna casam com padrão clínico. `patient_custom_field_values.value` é campo
 customizado de paciente e pode conter qualquer coisa. `access_audit_events.device_id`
 identifica o dispositivo. `email_send_log.metadata` é JSON que pode carregar destinatário. E
@@ -360,21 +354,20 @@ da tabela ou casaram com uma palavra isolada.
 **O falso positivo mais interessante: `checkins.training_type`.** O classificador o marcou como
 dado de saúde, e tecnicamente é. Mas é o campo do check-in de treino que o usuário
 deliberadamente torna público no Pitaia. **Consentimento muda a classificação**, e nenhuma
-heurística baseada em nome de coluna ou de tabela pode capturar isso — a informação sobre a
+heurística baseada em nome de coluna ou de tabela pode capturar isso, porque a informação sobre a
 base legal não está no esquema, está na decisão do titular.
 
 O padrão geral: **a heurística acerta onde o dado é estruturado e nomeado por convenção, e
-falha nos três lugares em que a nomenclatura não carrega a informação relevante** — texto
-livre, identificadores, e escolha do titular. É o limite de classificar dado pessoal por
+falha nos três lugares em que a nomenclatura não carrega a informação relevante**: texto livre, identificadores, e escolha do titular. É o limite de classificar dado pessoal por
 esquema, e é a razão de o número ter sido medido em vez de assumido.
 
 ![Perfil de qualidade por atributo, medido na Bronze antes da limpeza](evidencias/03_perfil_qualidade.png)
 
 *Perfil de qualidade por atributo, medido na Bronze antes da limpeza*
 
-![Duplicatas por chave natural — as 30 de `funcoes` são os overloads](evidencias/04_perfil_duplicatas.png)
+![Duplicatas por chave natural, as 30 de `funcoes` são os overloads](evidencias/04_perfil_duplicatas.png)
 
-*Duplicatas por chave natural — as 30 de `funcoes` são os overloads*
+*Duplicatas por chave natural, as 30 de `funcoes` são os overloads*
 
 ![Distribuição das classes de dado pessoal e origem da classificação](evidencias/05_classe_dado.png)
 
@@ -388,7 +381,7 @@ esquema, e é a razão de o número ter sido medido em vez de assumido.
 
 *Os quatro números que resumem a auditoria*
 
-### P1 — Proporção de tabelas expostas sem RLS
+### P1: Proporção de tabelas expostas sem RLS
 
 **Resultado: 0%.** As 70 tabelas expostas via PostgREST têm Row Level Security habilitado,
 sem exceção.
@@ -396,12 +389,11 @@ sem exceção.
 Vale notar que a consulta devolve **uma única linha**: nenhum schema gerenciado pelo Supabase
 aparece como exposto via API, porque os schemas expostos configurados no projeto são apenas
 `public` e `graphql_public`. O grupo de comparação, que aparece nas demais perguntas, não se
-aplica aqui — e isso em si é informação: a superfície alcançável pela chave anônima é
+aplica aqui, e isso em si é informação: a superfície alcançável pela chave anônima é
 exatamente o schema da aplicação, e nada além dele.
 
 Este é o resultado mais importante do trabalho, e é positivo. A falha mais comum e mais grave
-em projetos Supabase é a tabela esquecida sem RLS: como a chave anônima é pública por design
-— ela vive embutida no front-end —, uma tabela sem política não é "menos protegida", é
+em projetos Supabase é a tabela esquecida sem RLS: como a chave anônima é pública por design (ela vive embutida no front-end), uma tabela sem política não é "menos protegida", é
 aberta para qualquer pessoa que inspecione o bundle JavaScript. A ausência completa dessa
 falha indica que habilitar RLS foi tratado como padrão do projeto, não como exceção lembrada
 caso a caso. Reportar ausência de falha com número é tão válido quanto reportar falha, e é o
@@ -411,7 +403,7 @@ que separa uma auditoria de uma lista de reclamações.
 
 *Resultado da P1*
 
-### P2 — RLS habilitado com zero políticas
+### P2: RLS habilitado com zero políticas
 
 **Resultado: 25 detectadas, mas apenas 1 na aplicação.**
 
@@ -430,19 +422,18 @@ qualquer checklist que pergunte "RLS está ativo?" e devolve zero linhas para to
 política é o comportamento **correto**: o acesso a essas tabelas se dá pelas APIs de
 autenticação e de armazenamento do Supabase, usando a `service_role`, que contorna RLS por
 definição. Bloquear o acesso via PostgREST é exatamente o que se espera ali. Sem o campo
-`dominio` separando aplicação de plataforma, o relatório apontaria 25 defeitos onde existe 1 —
-e os 24 falsos seriam defendidos com convicção, já que a regra os detectou corretamente.
+`dominio` separando aplicação de plataforma, o relatório apontaria 25 defeitos onde existe 1, e os 24 falsos seriam defendidos com convicção, já que a regra os detectou corretamente.
 
 A única tabela da aplicação nessa condição é um defeito real, e de um tipo específico: pelo
 princípio de *fail-safe defaults*, um dos oito que Saltzer e Schroeder formularam em 1975, o
-sistema falhou do lado certo — quebra funcionalidade, não vaza dado. O custo provável é uma
+sistema falhou do lado certo: quebra funcionalidade, não vaza dado. O custo provável é uma
 funcionalidade do Pitaia que não responde e cuja causa ninguém associou ao RLS.
 
 ![Resultado da P2](evidencias/p2.png)
 
 *Resultado da P2*
 
-### P3 — Políticas com isolamento real
+### P3: Políticas com isolamento real
 
 **Resultado: entre 88,6% e 100%, conforme a role e o comando.**
 
@@ -458,7 +449,7 @@ funcionalidade do Pitaia que não responde e cuja causa ninguém associou ao RLS
 O padrão é nítido e revela algo sobre como o sistema foi construído: **as operações de
 escrita estão universalmente isoladas; as de leitura não.** Todas as 43 políticas de
 `INSERT`, `UPDATE` e `DELETE` para `authenticated` amarram a linha ao usuário. As falhas se
-concentram em `SELECT` — 4 políticas em `authenticated` e 5 em `public` sem qualquer
+concentram em `SELECT`: 4 políticas em `authenticated` e 5 em `public` sem qualquer
 referência a `auth.uid()`, ao JWT ou a coluna de tenant. Uma política de `SELECT` para
 `authenticated` sem filtro significa que qualquer conta logada alcança as linhas de todas as
 outras.
@@ -466,7 +457,7 @@ outras.
 Há também **uma política `SELECT` com `USING(true)`** para `authenticated`, que concede
 leitura irrestrita.
 
-As 209 políticas distribuídas em 70 tabelas — cerca de três por tabela — formam uma
+As 209 políticas distribuídas em 70 tabelas (cerca de três por tabela) formam uma
 superfície que dificilmente alguém revisa por completo. Vale o princípio de *economia de
 mecanismo*, também de Saltzer e Schroeder, e a formulação mais direta de Bruce Schneier: a
 complexidade é o pior inimigo da segurança. Não é que cada política esteja errada; é que o
@@ -476,32 +467,30 @@ volume torna improvável que todas estejam certas.
 
 *Resultado da P3*
 
-### P4 — Escrita disponível à role anônima
+### P4: Escrita disponível à role anônima
 
 **Resultado: 294 achados de privilégio anônimo, dos quais 39 sobre tabelas com dado de saúde.**
 
 Este número precisa ser lido com cuidado, e é onde o `score_ajustado` faz diferença. O
 Supabase concede `GRANT` amplo a `anon` e `authenticated` **por padrão de arquitetura**, e
 delega a proteção ao RLS. Esses 333 achados (R08 + R16) descrevem o modelo da plataforma, não
-um defeito introduzido pela aplicação — por isso foram marcados como `esperado_por_design` e
+um defeito introduzido pela aplicação, por isso foram marcados como `esperado_por_design` e
 removidos do score ajustado, sem serem descartados do modelo.
 
 O que eles revelam continua sendo relevante, e é arquitetural: **o RLS é o único controle
 entre a chave anônima e os dados.** Não há defesa em profundidade. Desabilitar RLS em
-qualquer uma dessas tabelas, por qualquer motivo — uma migração, um debug, um ajuste
-apressado — converte imediatamente 333 possibilidades em 333 vulnerabilidades, e 39 delas
+qualquer uma dessas tabelas, por qualquer motivo (uma migração, um debug, um ajuste apressado), converte imediatamente 333 possibilidades em 333 vulnerabilidades, e 39 delas
 atingiriam dado clínico.
 
 Vale registrar que integridade é uma dimensão distinta de confidencialidade, na linha do
 modelo de Clark e Wilson (1987). A maioria das auditorias examina apenas leitura indevida. Em
-um sistema de saúde, escrita indevida permite inserir registro falso no prontuário de
-alguém — e o impacto disso pode superar o de um vazamento.
+um sistema de saúde, escrita indevida permite inserir registro falso no prontuário de alguém, e o impacto disso pode superar o de um vazamento.
 
 ![Resultado da P4](evidencias/p4.png)
 
 *Resultado da P4*
 
-### P5 — Concentração de risco por schema
+### P5: Concentração de risco por schema
 
 | schema | domínio | objetos | achados | score bruto | score ajustado | por objeto |
 |---|---|---|---|---|---|---|
@@ -530,7 +519,7 @@ catastrófica.
 
 *Achados por schema e severidade*
 
-### P6 — Distribuição pelo OWASP Top 10:2025
+### P6: Distribuição pelo OWASP Top 10:2025
 
 | categoria | achados | score | % do total |
 |---|---|---|---|
@@ -543,8 +532,7 @@ catastrófica.
 A concentração em A01 era esperada e confirma o diagnóstico: o risco de uma aplicação
 multi-tenant de saúde é, essencialmente, controle de acesso. Vale registrar duas mudanças da
 edição 2025, publicada em janeiro de 2026 sobre a análise de mais de 175 mil CVEs: **A02
-Security Misconfiguration subiu de #5 para #2**, porque má configuração passou a dominar os
-dados — e os 182 achados de A02 aqui, ainda que de baixa severidade, ilustram isso na escala
+Security Misconfiguration subiu de #5 para #2**, porque má configuração passou a dominar os dados, e os 182 achados de A02 aqui, ainda que de baixa severidade, ilustram isso na escala
 de uma única aplicação. E **A03 Software Supply Chain Failures é categoria nova**; os dois
 achados de extensão instalada fora do schema `extensions` caem exatamente nela.
 
@@ -556,7 +544,7 @@ achados de extensão instalada fora do schema `extensions` caem exatamente nela.
 
 *Score de risco por categoria do OWASP Top 10:2025*
 
-### P7 — Colunas com dado de saúde sem proteção
+### P7: Colunas com dado de saúde sem proteção
 
 **Resultado: zero. 210 de 210 colunas de dado de saúde estão em tabelas com RLS.**
 
@@ -567,14 +555,14 @@ achados de extensão instalada fora do schema `extensions` caem exatamente nela.
 | `credencial` | 22 | 22 | 0 | 0,0 |
 | demais classes | 17 | 17 | 0 | 0,0 |
 
-Em termos regulatórios: nenhuma coluna classificada como dado referente à saúde — categoria
+Em termos regulatórios: nenhuma coluna classificada como dado referente à saúde (categoria
 que o art. 5º, II da LGPD trata como sensível e cujo tratamento o art. 11 condiciona a base
-legal específica — está em tabela alcançável sem controle de linha. A obrigação do art. 46,
+legal específica) está em tabela alcançável sem controle de linha. A obrigação do art. 46,
 de adotar medidas de segurança proporcionais ao risco, está atendida no nível da
 exposição direta.
 
 É importante delimitar o que esse zero significa. Na taxonomia de privacidade de Daniel
-Solove (2006), ele cobre **exposure** — a revelação direta. Não cobre **aggregation**: quantos
+Solove (2006), ele cobre **exposure**, a revelação direta. Não cobre **aggregation**: quantos
 prontuários distintos um mesmo perfil consegue percorrer em sequência, ainda que cada acesso
 individual seja legítimo. Essa dimensão não foi medida e permanece em aberto.
 
@@ -582,11 +570,11 @@ individual seja legítimo. Essa dimensão não foi medida e permanece em aberto.
 
 *Resultado da P7*
 
-![Exposição por classe de dado pessoal — a ausência de barras vermelhas é o resultado](evidencias/02_exposicao_lgpd.png)
+![Exposição por classe de dado pessoal, a ausência de barras vermelhas é o resultado](evidencias/02_exposicao_lgpd.png)
 
-*Exposição por classe de dado pessoal — a ausência de barras vermelhas é o resultado*
+*Exposição por classe de dado pessoal, a ausência de barras vermelhas é o resultado*
 
-### P8 — Isolamento de prontuário entre pacientes
+### P8: Isolamento de prontuário entre pacientes
 
 **Resultado: 36 de 38 tabelas com dado de saúde estão corretamente isoladas. Duas não.**
 
@@ -599,7 +587,7 @@ individual seja legítimo. Essa dimensão não foi medida e permanece em aberto.
 Nas duas tabelas existe política concedida a `authenticated` sem filtro por usuário ou
 tenant. Na prática: qualquer conta autenticada do Pitaia alcança o dado clínico daquelas
 tabelas para qualquer paciente. Note que ambas têm RLS habilitado e a maioria de suas
-políticas corretamente isolada — `t_105` tem 12 de 18 — o que torna a falha invisível a
+políticas corretamente isolada (`t_105` tem 12 de 18), o que torna a falha invisível a
 qualquer verificação binária do tipo "essa tabela tem RLS?".
 
 Este é o achado central do trabalho, e a literatura sobre o tema é específica. Ross Anderson
@@ -608,12 +596,12 @@ sistemas de informação clínica, referência canônica sobre controle de acess
 Seu primeiro princípio é que **cada registro clínico carrega sua própria lista de controle de
 acesso**. Nas duas tabelas, o controle degrada de "quem tem relação com este paciente" para
 "qualquer conta autenticada". O modelo BMA prevê ainda notificação ao paciente sobre quem
-acessou seu registro e controle de agregação — nenhum dos dois implementado na plataforma,
+acessou seu registro e controle de agregação, e nenhum dos dois está implementado na plataforma,
 o que fica registrado em trabalhos futuros.
 
 Há também uma leitura de **integridade contextual**, no sentido de Helen Nissenbaum (2010):
 o dado carrega normas de fluxo ligadas ao contexto em que foi coletado. No Pitaia isso é
-literal, porque existem três perfis distintos — paciente, médico e educador físico — e o que
+literal, porque existem três perfis distintos (paciente, médico e educador físico), e o que
 faz sentido um médico ver não necessariamente faz sentido um educador físico ver. Não é uma
 permissão binária, é uma norma de contexto, e políticas que não distinguem papel não
 conseguem expressá-la.
@@ -646,7 +634,7 @@ buckets de Storage públicos e 2 tabelas de saúde legíveis por qualquer conta 
 **A causa raiz.** O padrão sugere uma assimetria consistente: habilitar RLS virou hábito
 automático, escrever a política correta não. Daí 25 tabelas com RLS e nenhuma política, 9
 políticas de `SELECT` sem isolamento e 100% das políticas de escrita corretas. Proteger
-escrita é intuitivo — ninguém quer que outro usuário altere seus dados. Proteger leitura
+escrita é intuitivo, porque ninguém quer que outro usuário altere seus dados. Proteger leitura
 exige pensar no cenário em que alguém *consulta* dado alheio, que é menos imediato e,
 num sistema de saúde, mais grave.
 
@@ -674,8 +662,8 @@ catálogo documentado no Unity Catalog e as oito perguntas de negócio respondid
 Mais do que o pipeline, o objetivo declarado era transformar o catálogo de um banco em um
 **backlog priorizado**, e isso foi alcançado: a `gold.backlog_remediacao` entrega uma ordem de
 correção acionável, com os quatro achados de escalada de privilégio no topo. As duas perguntas
-que mais importavam — quantas colunas de dado de saúde estão desprotegidas (P7) e se um
-paciente alcança o prontuário de outro (P8) — foram respondidas de forma conclusiva.
+que mais importavam, quantas colunas de dado de saúde estão desprotegidas (P7) e se um
+paciente alcança o prontuário de outro (P8), foram respondidas de forma conclusiva.
 
 ### O que não foi atingido, e por quê
 
@@ -685,7 +673,7 @@ descrevê-la num instante. Era a análise mais interessante disponível e ficou 
 tempo.
 
 **A análise prova o que o banco permite, não o que a aplicação expõe.** As duas tabelas
-apontadas na P8 podem estar protegidas por filtro no front-end. Não testei — isso exigiria
+apontadas na P8 podem estar protegidas por filtro no front-end. Não testei, porque isso exigiria
 emitir JWTs de dois pacientes distintos e comparar o retorno. A análise estática mostra a
 possibilidade, não o exercício dela. Por outro lado, é precisamente essa a razão de existir do
 RLS: confiar no filtro da interface é o que o princípio de mediação completa proíbe.
@@ -694,7 +682,7 @@ RLS: confiar no filtro da interface é o que o princípio de mediação completa
 coluna. Mediu-se **precisão de 80,0% e recall de 50,0%** numa amostra de 40 colunas rotuladas
 manualmente sob a definição ampla do art. 5º, I. A assimetria é o problema: ele é confiável
 quando acusa, mas encontra metade do que existe. Os erros se concentram em três lugares onde
-o nome não carrega a informação — texto livre, identificadores, e dado que o titular optou por
+o nome não carrega a informação: texto livre, identificadores, e dado que o titular optou por
 tornar público. Uma classificação por amostragem de conteúdo seria mais precisa e é um projeto
 em si.
 
@@ -709,13 +697,12 @@ problemas de privilégio anônimo numa aplicação que, medida de outra forma, t
 Entender que o Supabase concede `GRANT` amplo a `anon` e `authenticated` **por arquitetura**,
 delegando a proteção ao RLS, exigiu ler o modelo de segurança da plataforma com profundidade
 suficiente para distinguir característica de defeito. O `score_ajustado` nasceu daí. Sem essa
-distinção o pipeline produziria 579 alarmes e nenhum diagnóstico — e estaria tecnicamente
+distinção o pipeline produziria 579 alarmes e nenhum diagnóstico, e estaria tecnicamente
 correto ao fazê-lo, o que é o pior tipo de erro.
 
 **Conciliar granularidades heterogêneas numa única fato.** As 18 regras não observam a mesma
 coisa. A R04 é por função, a R05 por bucket, a R15 por coluna, a R08 por role × objeto, a R12
-por extensão. Forçar tudo numa `fato_achado` significou aceitar chaves estrangeiras nulas —
-um achado de bucket não tem `sk_coluna`, um de tabela sem PK não tem `sk_role` — e declarar
+por extensão. Forçar tudo numa `fato_achado` significou aceitar chaves estrangeiras nulas (um achado de bucket não tem `sk_coluna`, um de tabela sem PK não tem `sk_role`) e declarar
 isso explicitamente no catálogo. A alternativa, uma fato por tipo de regra, preservaria a
 pureza do modelo e destruiria a capacidade de somar risco entre categorias, que é justamente
 o que o backlog precisa fazer. Escolhi a fato única sabendo do custo.
@@ -723,14 +710,13 @@ o que o backlog precisa fazer. Escolhi a fato única sabendo do custo.
 **O limite entre medir e julgar.** O pipeline mede estrutura: quais colunas existem, quais
 políticas as protegem. Mas classificar dado de saúde exige decisões que a estrutura não
 carrega. Peso e altura são dado de saúde? Isoladamente, não; dentro de uma plataforma clínica
-com médico e educador físico acessando, sim — classifiquei pelo contexto de tratamento, não
+com médico e educador físico acessando, sim. Classifiquei pelo contexto de tratamento, não
 pelo nome do campo. E o caso inverso apareceu na rotulação manual: `checkins.training_type` é
 tecnicamente dado de saúde, mas é o check-in que o próprio usuário torna público. **O
 consentimento muda a classificação, e nenhum esquema de banco carrega a base legal.** Foi onde
 ficou claro que existe um teto para o que auditoria automatizada alcança.
 
-**Resistir a ajustar as regras até encontrarem algo.** Cinco das 18 — R01, R02, R03, R07 e
-R15 — terminaram com zero achados. A tentação de relaxar os critérios para que "produzissem
+**Resistir a ajustar as regras até encontrarem algo.** Cinco das 18 (R01, R02, R03, R07 e R15) terminaram com zero achados. A tentação de relaxar os critérios para que "produzissem
 resultado" foi real, porque um relatório com regras vazias parece incompleto. Mantê-las e
 reportar o zero acabou sendo a informação mais forte do trabalho: nenhuma tabela exposta sem
 RLS e nenhuma coluna de dado de saúde desprotegida. **Resultado negativo medido vale tanto
@@ -739,14 +725,13 @@ quanto achado**, mas só se a régua não tiver sido movida depois de ver os dad
 **Três atritos técnicos que custaram tempo real.** O mais instrutivo foi o do
 `information_schema`: uma consulta sintaticamente correta, executada sem erro, devolvendo
 dados incompletos por uma regra de visibilidade que eu não conhecia. Descobri porque as
-contagens não bateram entre a tela e o arquivo exportado — sem essa conferência trivial, teria
+contagens não bateram entre a tela e o arquivo exportado. Sem essa conferência trivial, teria
 concluído que a aplicação não tinha nenhum problema de privilégio anônimo. O segundo foi o dos
 *overloads*: o perfil de duplicatas acusou 30 repetições em `funcoes` e o pipeline as
 descartava; eram assinaturas distintas da mesma função, cada uma com suas próprias flags, e a
 deduplicação ingênua poderia ter escondido um `SECURITY DEFINER` vulnerável. Foi o momento em
 que **medir a qualidade dos dados corrigiu a modelagem**, e não o contrário. O terceiro,
-menor: `input_file_name()` bloqueada pelo Unity Catalog e aspas simples quebrando o literal de
-`COMMENT` — atritos que só existem dentro de um ambiente governado e não aparecem rodando
+menor: `input_file_name()` bloqueada pelo Unity Catalog e aspas simples quebrando o literal de `COMMENT`, atritos que só existem dentro de um ambiente governado e não aparecem rodando
 Spark solto.
 
 ### Trabalhos futuros
@@ -762,8 +747,7 @@ Spark solto.
   dimensão que fica descoberta.
 - **Classificação de dado de saúde por conteúdo** (amostragem com NER clínico) em vez de
   nomenclatura, elevando precisão e recall.
-- **Regras de MCP** na `dim_regra` — *tool poisoning*, *confused deputy*, *token passthrough* —
-  relevantes porque a plataforma expõe interface MCP e essa superfície não foi auditada.
+- **Regras de MCP** na `dim_regra` (*tool poisoning*, *confused deputy*, *token passthrough*), relevantes porque a plataforma expõe interface MCP e essa superfície não foi auditada.
 
 ---
 

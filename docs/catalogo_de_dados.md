@@ -16,9 +16,9 @@
 
 ---
 
-# Camada Gold — `gold`
+# Camada Gold: `gold`
 
-## `fato_achado` — tabela fato
+## `fato_achado`: tabela fato
 
 **Contexto.** Cada linha é um achado de segurança: uma das 18 regras de auditoria violada
 por um objeto do banco, opcionalmente qualificada por coluna e por role, em um snapshot do
@@ -32,19 +32,19 @@ catálogo. É a tabela que sustenta todas as oito perguntas de negócio.
 | Campo | Tipo | Descrição | Domínio / faixa |
 |---|---|---|---|
 | `sk_achado` | int | Surrogate key do achado | ≥ 1 |
-| `sk_objeto` | int | FK → `dim_objeto` | — |
-| `sk_coluna` | int | FK → `dim_coluna`. Nulo quando o achado não é por coluna | — |
-| `sk_regra` | bigint | FK → `dim_regra` | — |
-| `sk_role` | int | FK → `dim_role`. Nulo quando o achado não é por role | — |
-| `sk_tempo` | int | FK → `dim_tempo` | — |
+| `sk_objeto` | int | FK → `dim_objeto` |, |
+| `sk_coluna` | int | FK → `dim_coluna`. Nulo quando o achado não é por coluna |, |
+| `sk_regra` | bigint | FK → `dim_regra` |, |
+| `sk_role` | int | FK → `dim_role`. Nulo quando o achado não é por role |, |
+| `sk_tempo` | int | FK → `dim_tempo` |, |
 | `score_risco` | int | `dim_regra.peso` × multiplicador do dado (3 sensível, 2 pessoal, 1 demais) | 1 – 30 |
 | `envolve_dado_pessoal` | boolean | Achado atinge coluna com dado pessoal (LGPD art. 5º, I) | true / false |
 | `envolve_dado_saude` | boolean | Achado atinge dado referente à saúde (art. 11) | true / false |
 | `envolve_dado_sensivel` | boolean | Achado atinge dado sensível (art. 5º, II) | true / false |
-| `detalhe` | string | Descrição gerada pelo motor de regras. Não contém nome real de objeto | — |
-| `_processado_em` | timestamp | Metadado de controle | — |
+| `detalhe` | string | Descrição gerada pelo motor de regras. Não contém nome real de objeto |, |
+| `_processado_em` | timestamp | Metadado de controle |, |
 
-## `dim_regra` — dimensão curada manualmente
+## `dim_regra`: dimensão curada manualmente
 
 **Contexto.** As 18 regras de auditoria com severidade, peso e vínculo ao OWASP
 Top 10:2025. Curada à mão para que o referencial de segurança seja consultável por SQL em
@@ -52,13 +52,13 @@ vez de existir só como texto no relatório. **Linhagem:** literal no notebook 0
 
 | Campo | Tipo | Descrição | Domínio |
 |---|---|---|---|
-| `sk_regra` | bigint | Surrogate key | — |
+| `sk_regra` | bigint | Surrogate key |, |
 | `id_regra` | string | Chave natural | `R01` – `R18` |
-| `descricao` | string | Enunciado da regra | — |
+| `descricao` | string | Enunciado da regra |, |
 | `severidade` | string | Nível de gravidade | Critico, Alto, Medio, Baixo |
 | `peso` | int | Peso numérico da severidade | 10, 6, 3, 1 |
 | `categoria_owasp` | string | Categoria do OWASP Top 10:2025 | A01, A02, A03, A06, A08 (sufixo `:2025`) |
-| `referencia` | string | Nome completo da categoria OWASP | — |
+| `referencia` | string | Nome completo da categoria OWASP |, |
 | `escopo_saude` | boolean | True em R15–R18, específicas de dado de saúde | true / false |
 
 ### As 18 regras
@@ -92,7 +92,7 @@ o Pitaia está em produção e o repositório é público. **Linhagem:** `silver
 
 | Campo | Tipo | Descrição | Domínio |
 |---|---|---|---|
-| `sk_objeto` | int | Surrogate key | — |
+| `sk_objeto` | int | Surrogate key |, |
 | `schema_anon` | string | Schema anonimizado | `app_s1`… ou nome do schema Supabase |
 | `objeto_anon` | string | Objeto anonimizado | `t_001`… |
 | `tipo_objeto` | string | Tipo do objeto | tabela, tabela_particionada, view, view_materializada, tabela_estrangeira, outro |
@@ -102,7 +102,7 @@ o Pitaia está em produção e o repositório é público. **Linhagem:** `silver
 | `rls_forcado` | boolean | `pg_class.relforcerowsecurity` | true / false |
 | `security_invoker` | boolean | View com `security_invoker=true` | true / false |
 | `tem_documentacao` | boolean | Objeto possui `COMMENT` no PostgreSQL | true / false |
-| `schema_nome`, `objeto` | string | Campos técnicos de join. Não publicados | — |
+| `schema_nome`, `objeto` | string | Campos técnicos de join. Não publicados |, |
 
 ## `dim_coluna`
 
@@ -113,7 +113,7 @@ rotulada à mão e está declarada no README. **Linhagem:** `silver.coluna` ←
 
 | Campo | Tipo | Descrição | Domínio |
 |---|---|---|---|
-| `sk_coluna` | int | Surrogate key | — |
+| `sk_coluna` | int | Surrogate key |, |
 | `coluna_anon` | string | Coluna anonimizada | `c_` + 8 hex |
 | `tipo_dado` | string | Tipo PostgreSQL | text, uuid, timestamptz, numeric, … |
 | `nullable` | boolean | Aceita nulo | true / false |
@@ -126,13 +126,13 @@ rotulada à mão e está declarada no README. **Linhagem:** `silver.coluna` ←
 
 **Contexto.** Uma linha por política × role. Existe como dimensão própria porque P3 e P8
 consultam característica de política sem passar pelo fato. A expressão SQL literal **não**
-é publicada — só as flags derivadas dela. **Linhagem:** `silver.politica` ←
+é publicada, apenas as flags derivadas dela. **Linhagem:** `silver.politica` ←
 `bronze.politicas` ← `pg_policies`.
 
 | Campo | Tipo | Descrição | Domínio |
 |---|---|---|---|
-| `sk_politica` | int | Surrogate key | — |
-| `politica` | string | Nome da política no PostgreSQL | — |
+| `sk_politica` | int | Surrogate key |, |
+| `politica` | string | Nome da política no PostgreSQL |, |
 | `role_nome` | string | Role à qual a política se aplica | anon, authenticated, public, service_role, … |
 | `comando` | string | Comando coberto | ALL, SELECT, INSERT, UPDATE, DELETE |
 | `permissiva` | boolean | `PERMISSIVE` (true) ou `RESTRICTIVE` (false) | true / false |
@@ -149,8 +149,8 @@ consultam característica de política sem passar pelo fato. A expressão SQL li
 
 | Campo | Tipo | Descrição | Domínio |
 |---|---|---|---|
-| `sk_role` | int | Surrogate key | — |
-| `role_nome` | string | Nome da role no PostgreSQL | — |
+| `sk_role` | int | Surrogate key |, |
+| `role_nome` | string | Nome da role no PostgreSQL |, |
 | `tipo_role` | string | Agrupamento por nível de privilégio | anonima, autenticada, privilegiada, outra |
 
 ## `dim_tempo`
@@ -159,8 +159,8 @@ consultam característica de política sem passar pelo fato. A expressão SQL li
 
 | Campo | Tipo | Descrição | Domínio |
 |---|---|---|---|
-| `sk_tempo` | int | Surrogate key | — |
-| `data_snapshot` | date | Data da coleta do catálogo | — |
+| `sk_tempo` | int | Surrogate key |, |
+| `data_snapshot` | date | Data da coleta do catálogo |, |
 | `ano` | int | Derivado | 2026 |
 | `mes` | int | Derivado | 1 – 12 |
 | `dia_semana` | string | Derivado | Monday – Sunday |
@@ -175,12 +175,12 @@ consultam característica de política sem passar pelo fato. A expressão SQL li
 | `isolamento_prontuario` | 1 tabela que contém dado de saúde | P8 | `aberta_a_autenticados` (0 ou 1) |
 
 `isolamento_prontuario.aberta_a_autenticados = 1` significa que existe política para
-`authenticated` sem filtro por usuário ou tenant — ou seja, qualquer conta logada alcança o
+`authenticated` sem filtro por usuário ou tenant, ou seja, qualquer conta logada alcança o
 dado de saúde de qualquer paciente. É o pior caso detectável estaticamente.
 
 ---
 
-# Camada Silver — `silver`
+# Camada Silver: `silver`
 
 | Tabela | Granularidade | Origem | Principais derivações |
 |---|---|---|---|
@@ -190,7 +190,7 @@ dado de saúde de qualquer paciente. É o pior caso detectável estaticamente.
 | `grant_role` | 1 por role × objeto × privilégio | `bronze.grants` | deduplicação por herança de role |
 | `funcao` | 1 por função | `bronze.funcoes` | `security_definer`, `tem_search_path` |
 | `bucket` | 1 por bucket de Storage | `bronze.buckets` | `publico` tipado |
-| `extensao` | 1 por extensão instalada | `bronze.extensoes` | — |
+| `extensao` | 1 por extensão instalada | `bronze.extensoes` |, |
 | `constraint_tabela` | 1 por constraint | `bronze.constraints` | filtro de schemas de sistema |
 | `perfil_qualidade` | 1 por tabela × coluna da Bronze | as 8 tabelas Bronze | `pct_nulo`, `n_distintos`, `tamanho_max` |
 | `perfil_duplicatas` | 1 por tabela Bronze | as 8 tabelas Bronze | `n_duplicatas` por chave natural |
@@ -200,7 +200,7 @@ dado de saúde de qualquer paciente. É o pior caso detectável estaticamente.
 
 | Campo | Tipo | Descrição | Faixa |
 |---|---|---|---|
-| `tabela`, `coluna` | string | Atributo perfilado | — |
+| `tabela`, `coluna` | string | Atributo perfilado |, |
 | `n_linhas` | int | Total de linhas da tabela Bronze | ≥ 0 |
 | `n_nulos` | int | Nulos ou strings vazias | 0 – `n_linhas` |
 | `pct_nulo` | double | Completude | 0 – 100 |
@@ -209,7 +209,7 @@ dado de saúde de qualquer paciente. É o pior caso detectável estaticamente.
 
 ---
 
-# Camada Bronze — `bronze`
+# Camada Bronze: `bronze`
 
 Oito tabelas. **Todas as colunas de negócio como `string`** por decisão de projeto: a
 Bronze preserva o dado como veio, e a tipagem é responsabilidade da Silver.
@@ -221,9 +221,9 @@ Metadados de controle presentes em todas: `_arquivo_origem`, `_fonte`, `_snapsho
 |---|---|---|
 | `objetos` | `pg_class` + `pg_namespace` | inclui `reloptions` para detectar `security_invoker` |
 | `politicas` | `pg_policies` | `roles` serializado com `;`; `expressao_using` nula em políticas só com `WITH CHECK` |
-| `colunas` | `information_schema.columns` | — |
+| `colunas` | `information_schema.columns` |, |
 | `grants` | `information_schema.role_table_grants` | maior volume da extração |
-| `funcoes` | `pg_proc` | **somente flags** — corpo da função não coletado |
-| `buckets` | `storage.buckets` | — |
+| `funcoes` | `pg_proc` | **somente flags**, corpo da função não coletado |
+| `buckets` | `storage.buckets` |, |
 | `extensoes` | `pg_extension` | cadeia de suprimentos, OWASP A03:2025 |
 | `constraints` | `information_schema.table_constraints` | PK, UNIQUE e FK |

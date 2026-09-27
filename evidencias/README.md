@@ -20,15 +20,15 @@ Catalog → workspace → gold → Volumes → figuras → baixar cada arquivo.
 | arquivo | onde capturar |
 |---|---|
 | `01_volume_csvs.png` | Catalog → bronze → Volumes → raw, com os 8 CSVs |
-| `02_ingestao_contagens.png` | saída do notebook 01 — as 8 tabelas com contagens |
-| `03_perfil_qualidade.png` | saída do 02 — `perfil_qualidade` por `pct_nulo` |
-| `04_perfil_duplicatas.png` | saída do 02 — `perfil_duplicatas`, com as 30 de `funcoes` |
-| `05_classe_dado.png` | saída do 02 — distribuição de `classe_dado` |
+| `02_ingestao_contagens.png` | saída do notebook 01, as 8 tabelas com contagens |
+| `03_perfil_qualidade.png` | saída do 02, `perfil_qualidade` por `pct_nulo` |
+| `04_perfil_duplicatas.png` | saída do 02, `perfil_duplicatas`, com as 30 de `funcoes` |
+| `05_classe_dado.png` | saída do 02, distribuição de `classe_dado` |
 | `06_catalogo_tabela.png` | Catalog → gold → `fato_achado` → Overview |
 | `07_catalogo_coluna.png` | Catalog → gold → `fato_achado` → aba Columns |
 | `08_lineage.png` | Catalog → gold → `fato_achado` → aba **Lineage** |
-| `09_dim_regra.png` | saída do 03 — as 18 regras |
-| `10_backlog.png` | saída do 03 — `backlog_remediacao` |
-| `p1.png` … `p8.png` | saída do 04 — uma por pergunta |
+| `09_dim_regra.png` | saída do 03, as 18 regras |
+| `10_backlog.png` | saída do 03, `backlog_remediacao` |
+| `p1.png` … `p8.png` | saída do 04, uma por pergunta |
 
 Total: **23 arquivos**.
