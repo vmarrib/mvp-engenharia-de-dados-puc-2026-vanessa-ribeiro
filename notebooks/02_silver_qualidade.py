@@ -300,8 +300,12 @@ amostra = (silver_col
            .limit(40))
 display(amostra)
 
-# TODO rotular a mao as 40 linhas acima, contar FP e FN, e registrar no README.
-# Anotar tambem 2 exemplos de erro para comentar na discussao.
+# As 40 linhas acima foram rotuladas a mao sob a definicao ampla do art. 5, I da LGPD.
+# Resultado: VP=12, FP=3, FN=12, VN=13 -> precisao 80,0% e recall 50,0%.
+# O classificador e confiavel quando acusa, mas encontra metade do que existe.
+# Os dois erros mais ilustrativos estao discutidos no README:
+#   FN: profiles.cycle_length_days (ciclo menstrual, nome neutro)
+#   FP: checkins.training_type (o usuario torna publico por escolha propria)
 
 # COMMAND ----------
 

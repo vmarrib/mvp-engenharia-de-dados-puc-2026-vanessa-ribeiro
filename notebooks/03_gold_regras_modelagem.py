@@ -73,7 +73,7 @@ dim_regra = (spark.createDataFrame(REGRAS, """id_regra string, descricao string,
              .withColumn("escopo_saude", F.col("id_regra").isin("R15", "R16", "R17", "R18"))
              # R08 e R16 disparam em massa porque o Supabase concede GRANT amplo a anon e
              # authenticated POR DESIGN - a protecao fica no RLS, nao no grant. Sem marcar
-             # isso, 343 achados de arquitetura abafam os 8 que sao defeito real da aplicacao.
+             # isso, 333 achados de arquitetura abafam os 8 que sao defeito real da aplicacao.
              # A flag permite calcular um score ajustado sem descartar o achado.
              .withColumn("esperado_por_design", F.col("id_regra").isin("R08", "R16"))
              .withColumn("sk_regra", F.monotonically_increasing_id()))
