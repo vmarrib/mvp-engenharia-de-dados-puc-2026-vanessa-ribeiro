@@ -285,7 +285,7 @@ Perfilamento feito **antes** de qualquer limpeza — medir depois não prova nad
 | 5 | Grants duplicados por herança de role | Unicidade | `dropDuplicates` com contagem prévia | 3.826 linhas, **0 duplicatas** |
 | 5b | 30 repetições em `funcoes` pela chave `(schema, nome)` | Unicidade | **não deduplicadas** — são overloads, ver nota | 195 linhas, 165 nomes distintos |
 | 6 | Schemas do Supabase misturados aos da aplicação | Escopo | flag `dominio`, mantidos como comparação | 2 schemas / 79 objetos da aplicação vs 8 schemas / 54 objetos do Supabase |
-| 7 | Falso positivo e falso negativo do classificador LGPD | Acurácia | amostra de 40 colunas rotulada à mão | precisão **73,3%** · recall **73,3%** |
+| 7 | Falso positivo e falso negativo do classificador LGPD | Acurácia | amostra de 40 colunas rotulada à mão | precisão **80,0%** · recall **50,0%** |
 
 **Sobre o item 1.** O explode não multiplicou linhas: cada política do Pitaia é concedida a
 exatamente uma role, então 209 políticas produziram 209 pares política × role. A
@@ -311,35 +311,50 @@ que se mostram limpas.
 como exata seria desonesto. Quarenta colunas dos schemas expostos foram amostradas por hash
 estável — não por `rand()`, para que a amostra seja reproduzível — e rotuladas manualmente.
 
+**O critério de rotulação precisa ser declarado**, porque ele determina o resultado. Adotei a
+definição ampla do art. 5º, I da LGPD: *dado pessoal é toda informação relacionada a pessoa
+identificada ou identificável*. Na prática, tudo que é informação do usuário conta — inclusive
+identificadores como `user_id` e marcas de atividade como `created_at` de um registro dele —
+**exceto o que o próprio usuário optou por tornar público**, que no Pitaia é o check-in de
+treino compartilhado.
+
 | | classificador diz que É | classificador diz que NÃO É |
 |---|---|---|
-| **é dado pessoal** | VP = 11 | FN = 4 |
-| **não é** | FP = 4 | VN = 21 |
+| **é dado pessoal** | VP = 12 | FN = 12 |
+| **não é** | FP = 3 | VN = 13 |
 
-**Precisão 73,3% · Recall 73,3%.** Em 40 colunas, oito discordâncias.
+**Precisão 80,0% · Recall 50,0%.**
 
-Os erros não são aleatórios, seguem dois padrões.
+A assimetria é o achado. O classificador é **confiável quando acusa** — 4 em cada 5 acertos —
+mas **encontra apenas metade** do que existe. Para uma auditoria de conformidade isso é a pior
+combinação possível: um relatório baseado nele subestimaria sistematicamente a superfície de
+dado pessoal, e o faria com aparência de precisão.
 
-**Falsos positivos — a herança de tabela alcança metadado.** `nutrition_plans.name` foi
-classificado como `nome_pessoa`, mas é o nome do *plano alimentar*, não de uma pessoa: o padrão
-`^name$` é genérico demais. `email_send_state.auth_email_ttl_minutes` virou `email` por conter
-a palavra, sendo um parâmetro de expiração. `invite_links.link_type` e
-`assigned_questionnaires.scheduled_date` herdaram a classe da tabela sendo campos de controle
-que o filtro de colunas técnicas não alcança — ele cobre `created_at` e sufixos `_id`, mas não
-`*_type` nem `scheduled_*`.
+Os erros seguem três padrões distintos.
 
-**Falsos negativos — dado sensível com nome neutro.** O mais grave é
-`profiles.cycle_length_days`: duração do ciclo menstrual, dado de saúde sensível pelo art. 5º,
-II, invisível para a heurística porque nem o nome da tabela (`profiles`) nem o da coluna casam
-com qualquer padrão clínico. `patient_custom_field_values.value` é campo customizado de
-paciente e pode conter qualquer coisa, inclusive dado clínico. `access_audit_events.device_id`
-identifica o dispositivo do usuário. `email_send_log.metadata` é um JSON que pode carregar
-destinatário.
+**Falsos negativos por nome neutro (o grupo maior).** `profiles.cycle_length_days` é duração do
+ciclo menstrual — dado de saúde sensível pelo art. 5º, II — invisível porque nem `profiles` nem
+o nome da coluna casam com padrão clínico. `patient_custom_field_values.value` é campo
+customizado de paciente e pode conter qualquer coisa. `access_audit_events.device_id`
+identifica o dispositivo. `email_send_log.metadata` é JSON que pode carregar destinatário. E
+todos os `user_id`, `created_at` e `updated_at` de tabelas de conteúdo do usuário, que a
+heurística trata como estrutura e a LGPD trata como informação relacionada a pessoa
+identificável.
 
-O padrão é consistente: **a heurística acerta onde o dado é estruturado e nomeado por
-convenção, e erra onde ele é livre ou onde o nome não descreve o conteúdo.** É o limite de
-classificar dado sensível por nomenclatura, e é a razão de o número ter sido medido em vez de
-assumido.
+**Falsos positivos por herança de metadado.** `invite_links.link_type` e
+`email_send_state.auth_email_ttl_minutes` são parâmetros de configuração que herdaram a classe
+da tabela ou casaram com uma palavra isolada.
+
+**O falso positivo mais interessante: `checkins.training_type`.** O classificador o marcou como
+dado de saúde, e tecnicamente é. Mas é o campo do check-in de treino que o usuário
+deliberadamente torna público no Pitaia. **Consentimento muda a classificação**, e nenhuma
+heurística baseada em nome de coluna ou de tabela pode capturar isso — a informação sobre a
+base legal não está no esquema, está na decisão do titular.
+
+O padrão geral: **a heurística acerta onde o dado é estruturado e nomeado por convenção, e
+falha nos três lugares em que a nomenclatura não carrega a informação relevante** — texto
+livre, identificadores, e escolha do titular. É o limite de classificar dado pessoal por
+esquema, e é a razão de o número ter sido medido em vez de assumido.
 
 ![Perfil de qualidade por atributo, medido na Bronze antes da limpeza](evidencias/03_perfil_qualidade.png)
 
