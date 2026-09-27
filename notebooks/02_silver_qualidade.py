@@ -191,7 +191,7 @@ salvar(obj.select("schema_nome", "objeto", "schema_anon", "objeto_anon"),
 # de medical_record_notes e dado clinico; a mesma coluna "notes" em checkin_groups nao
 # e. Olhar so o nome da coluna perde a maior parte do dado de saude - na primeira
 # versao eu achava 12 colunas em 640, o que era obviamente errado para uma plataforma
-# de saude. Com heranca de tabela sao 248.
+# de saude. Com heranca de tabela sao 301.
 
 TABELA_CLASSE = [
     ("saude_clinica", r"medical_record|anamnesis|lab_(result|marker)|medication|menstrual|"
