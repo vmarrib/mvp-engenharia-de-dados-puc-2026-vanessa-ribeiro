@@ -289,8 +289,15 @@ display(silver_col.groupBy("classe_dado", "is_dado_sensivel").count().orderBy(F.
 
 # COMMAND ----------
 
-amostra = (silver_col.select("coluna", "tipo_dado", "classe_dado", "is_dado_saude")
-                     .orderBy(F.rand(42)).limit(40))
+# amostra deterministica: hash estavel da chave em vez de rand(), para que a mesma
+# amostra saia em qualquer execucao e o numero do relatorio seja reproduzivel
+amostra = (silver_col
+           .filter(F.col("schema_nome").isin(EXPOSTOS))
+           .withColumn("_ordem", F.sha2(F.concat_ws("|", "objeto", "coluna", F.lit("42")), 256))
+           .orderBy("_ordem")
+           .select("objeto", "coluna", "tipo_dado", "classe_dado",
+                   "origem_classificacao", "is_dado_saude")
+           .limit(40))
 display(amostra)
 
 # TODO rotular a mao as 40 linhas acima, contar FP e FN, e registrar no README.

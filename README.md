@@ -301,8 +301,14 @@ traz, no markdown de cada célula, como ler o resultado e que frase escrever.`
 
 ### P1 — Proporção de tabelas expostas sem RLS
 
-**Resultado: 0%.** As 70 tabelas do schema principal da aplicação expostas via PostgREST têm
-Row Level Security habilitado, sem exceção.
+**Resultado: 0%.** As 70 tabelas expostas via PostgREST têm Row Level Security habilitado,
+sem exceção.
+
+Vale notar que a consulta devolve **uma única linha**: nenhum schema gerenciado pelo Supabase
+aparece como exposto via API, porque os schemas expostos configurados no projeto são apenas
+`public` e `graphql_public`. O grupo de comparação, que aparece nas demais perguntas, não se
+aplica aqui — e isso em si é informação: a superfície alcançável pela chave anônima é
+exatamente o schema da aplicação, e nada além dele.
 
 Este é o resultado mais importante do trabalho, e é positivo. A falha mais comum e mais grave
 em projetos Supabase é a tabela esquecida sem RLS: como a chave anônima é pública por design
@@ -316,17 +322,30 @@ que separa uma auditoria de uma lista de reclamações.
 
 ### P2 — RLS habilitado com zero políticas
 
-**Resultado: 25 tabelas.**
+**Resultado: 25 detectadas, mas apenas 1 na aplicação.**
+
+| schema | domínio | tabelas |
+|---|---|---|
+| `auth` | gerenciado pelo Supabase | 16 |
+| `storage` | gerenciado pelo Supabase | 7 |
+| `realtime` | gerenciado pelo Supabase | 1 |
+| **`public`** | **aplicação** | **1** |
 
 No PostgreSQL, RLS habilitado sem nenhuma política **nega todo acesso**. É o inverso exato da
-falha anterior: aqui o defeito é de disponibilidade, não de confidencialidade. A tabela passa
-em qualquer checklist que pergunte "RLS está ativo?" e, ao mesmo tempo, devolve zero linhas
-para todo mundo.
+falha anterior: o defeito é de disponibilidade, não de confidencialidade. A tabela passa em
+qualquer checklist que pergunte "RLS está ativo?" e devolve zero linhas para todo mundo.
 
-Vale ler isso pelo princípio de *fail-safe defaults*, um dos oito princípios de projeto que
-Saltzer e Schroeder formularam em 1975: na dúvida, o sistema deve negar. O PostgreSQL falha
-do lado certo — quebra funcionalidade, não vaza dado. O custo provável dessas 25 tabelas é
-alguma funcionalidade do Pitaia que não responde e cuja causa ninguém associou ao RLS.
+**A distinção por domínio é o que salva a conclusão.** Nos schemas `auth` e `storage`, RLS sem
+política é o comportamento **correto**: o acesso a essas tabelas se dá pelas APIs de
+autenticação e de armazenamento do Supabase, usando a `service_role`, que contorna RLS por
+definição. Bloquear o acesso via PostgREST é exatamente o que se espera ali. Sem o campo
+`dominio` separando aplicação de plataforma, o relatório apontaria 25 defeitos onde existe 1 —
+e os 24 falsos seriam defendidos com convicção, já que a regra os detectou corretamente.
+
+A única tabela da aplicação nessa condição é um defeito real, e de um tipo específico: pelo
+princípio de *fail-safe defaults*, um dos oito que Saltzer e Schroeder formularam em 1975, o
+sistema falhou do lado certo — quebra funcionalidade, não vaza dado. O custo provável é uma
+funcionalidade do Pitaia que não responde e cuja causa ninguém associou ao RLS.
 
 `SCREENSHOT`
 
