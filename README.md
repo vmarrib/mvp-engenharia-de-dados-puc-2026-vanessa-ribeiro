@@ -213,9 +213,9 @@ multiplica o peso da regra por 3 quando o achado atinge dado sensível.
 
 | Camada | Schema | Tabelas |
 |---|---|---|
-| Bronze | `pitaia_bronze` | 8 tabelas cruas |
-| Silver | `pitaia_silver` | `objeto`, `coluna`, `politica`, `grant_role`, `funcao`, `bucket`, `extensao`, `constraint_tabela`, `perfil_qualidade`, `perfil_duplicatas` |
-| Gold | `pitaia_gold` | `dim_objeto`, `dim_coluna`, `dim_politica`, `dim_role`, `dim_regra`, `dim_tempo`, `fato_achado`, `backlog_remediacao`, `postura_por_schema`, `mapa_exposicao_lgpd`, `isolamento_prontuario` |
+| Bronze | `bronze` | 8 tabelas cruas |
+| Silver | `silver` | `objeto`, `coluna`, `politica`, `grant_role`, `funcao`, `bucket`, `extensao`, `constraint_tabela`, `perfil_qualidade`, `perfil_duplicatas` |
+| Gold | `gold` | `dim_objeto`, `dim_coluna`, `dim_politica`, `dim_role`, `dim_regra`, `dim_tempo`, `fato_achado`, `backlog_remediacao`, `postura_por_schema`, `mapa_exposicao_lgpd`, `isolamento_prontuario` |
 
 ### Catálogo de dados
 
@@ -247,7 +247,7 @@ que cada etapa possa ser reexecutada isoladamente quando algo precisa de ajuste.
 | `02_silver_qualidade.py` | Perfil de qualidade, padronização, classificação LGPD | Bronze → 10 tabelas Silver |
 | `03_gold_regras_modelagem.py` | Motor de 18 regras, estrela, catálogo | Silver → 11 tabelas Gold |
 | `04_analise_perguntas.sql` | As 8 perguntas | Gold → resultados |
-| `05_visualizacoes.py` | Figuras do relatório | Gold → PNGs no Volume `pitaia_gold.figuras` |
+| `05_visualizacoes.py` | Figuras do relatório | Gold → PNGs no Volume `gold.figuras` |
 
 ### Transformações principais
 
@@ -274,7 +274,7 @@ que cada etapa possa ser reexecutada isoladamente quando algo precisa de ajuste.
 ## Qualidade de Dados (Etapa 4.5)
 
 Perfilamento feito **antes** de qualquer limpeza — medir depois não prova nada. Evidência em
-`pitaia_silver.perfil_qualidade` e `pitaia_silver.perfil_duplicatas`.
+`silver.perfil_qualidade` e `silver.perfil_duplicatas`.
 
 | # | Problema detectado | Dimensão | Tratamento | Volume |
 |---|---|---|---|---|

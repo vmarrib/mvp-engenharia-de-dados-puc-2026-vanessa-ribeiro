@@ -16,7 +16,7 @@
 
 ---
 
-# Camada Gold — `pitaia_gold`
+# Camada Gold — `gold`
 
 ## `fato_achado` — tabela fato
 
@@ -180,7 +180,7 @@ dado de saúde de qualquer paciente. É o pior caso detectável estaticamente.
 
 ---
 
-# Camada Silver — `pitaia_silver`
+# Camada Silver — `silver`
 
 | Tabela | Granularidade | Origem | Principais derivações |
 |---|---|---|---|
@@ -209,7 +209,7 @@ dado de saúde de qualquer paciente. É o pior caso detectável estaticamente.
 
 ---
 
-# Camada Bronze — `pitaia_bronze`
+# Camada Bronze — `bronze`
 
 Oito tabelas. **Todas as colunas de negócio como `string`** por decisão de projeto: a
 Bronze preserva o dado como veio, e a tipagem é responsabilidade da Silver.

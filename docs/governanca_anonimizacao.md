@@ -42,7 +42,7 @@ regras de negócio e segredos embutidos. A extração lê apenas as flags
 A anonimização é **estável** (a mesma tabela recebe sempre o mesmo código) e
 **determinística**, o que preserva a capacidade de join entre as camadas.
 
-O mapeamento reverso vive em `pitaia_silver._de_para_nao_publicar`, existe apenas
+O mapeamento reverso vive em `silver._de_para_nao_publicar`, existe apenas
 dentro do workspace do Databricks e **não é versionado**. O prefixo `_` e o sufixo
 `nao_publicar` sinalizam a intenção no próprio nome.
 
