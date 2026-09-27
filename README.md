@@ -258,7 +258,7 @@ que cada etapa possa ser reexecutada isoladamente quando algo precisa de ajuste.
 | Classificação LGPD | regex sobre nome de **tabela e coluna**, 15 classes | Liga estrutura do banco a risco regulatório | 301 de 1.238 colunas, das quais 210 de saúde |
 | Flags de política | deriva `filtra_uid`, `filtra_tenant`, `libera_tudo` e descarta a expressão | Permite auditar isolamento sem publicar a estrutura de multi-tenancy | Todas as políticas |
 | Anonimização | `t_001`, `c_<hash>`, estável e determinística | Repositório público, plataforma de saúde em produção | 100% dos identificadores |
-| Motor de regras | 18 `SELECT` em `UNION ALL` sobre a Silver | Converte catálogo em achado acionável | 589 achados, score 2.809 |
+| Motor de regras | 18 `SELECT` em `UNION ALL` sobre a Silver | Converte catálogo em achado acionável | 579 achados, score 2.704 |
 | Score de risco | `peso × 3` (sensível), `× 2` (pessoal), `× 1` | Prioriza o que é regulatoriamente crítico | Ordena o backlog |
 
 ![`dim_regra`: as 18 regras com severidade e categoria OWASP](evidencias/09_dim_regra.png)
@@ -679,11 +679,12 @@ possibilidade, não o exercício dela. Por outro lado, é precisamente essa a ra
 RLS: confiar no filtro da interface é o que o princípio de mediação completa proíbe.
 
 **Classificação por nomenclatura, não por conteúdo.** O classificador lê nomes de tabela e de
-coluna. Mediu-se **precisão de 73,3% e recall de 73,3%** numa amostra de 40 colunas
-rotuladas manualmente, e os erros seguem um padrão sistemático nas bordas — colunas de
-controle dentro de tabelas clínicas herdam classificação indevida, e texto livre em tabelas de
-nome neutro escapa. Uma classificação por amostragem de conteúdo seria mais precisa e é um
-projeto em si.
+coluna. Mediu-se **precisão de 80,0% e recall de 50,0%** numa amostra de 40 colunas rotuladas
+manualmente sob a definição ampla do art. 5º, I. A assimetria é o problema: ele é confiável
+quando acusa, mas encontra metade do que existe. Os erros se concentram em três lugares onde
+o nome não carrega a informação — texto livre, identificadores, e dado que o titular optou por
+tornar público. Uma classificação por amostragem de conteúdo seria mais precisa e é um projeto
+em si.
 
 **Coleta não automatizada.** Decisão consciente, explicada na seção de Carga, mas ainda assim
 uma limitação: o pipeline não roda sozinho amanhã.
