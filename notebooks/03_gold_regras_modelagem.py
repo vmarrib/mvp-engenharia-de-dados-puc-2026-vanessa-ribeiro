@@ -403,13 +403,6 @@ DOC_TABELA = {
  "mapa_exposicao_lgpd": "Para cada classe de dado pessoal, quantas colunas estao protegidas por RLS e quantas expostas. Medida de conformidade.",
  "isolamento_prontuario": "Uma linha por tabela que contem dado de saude, com o estado do isolamento entre pacientes. aberta_a_autenticados=1 indica que qualquer usuario logado alcanca o dado.",
 }
-def sql_txt(t):
-    """Aspa simples no texto quebra o literal SQL. Dobrar e o escape."""
-    return t.replace("'", "''")
-
-for t, doc in DOC_TABELA.items():
-    spark.sql(f"COMMENT ON TABLE {GOLD}.{t} IS '{sql_txt(doc)}'")
-
 # Documentar 20 colunas a mao e deixar 100 sem descricao nao atende o enunciado, que pede
 # "nome e descricao do que cada campo representa". Separo em dois dicionarios: COMUM para
 # colunas que aparecem em varias tabelas com o mesmo sentido, ESPECIFICO para as que mudam
