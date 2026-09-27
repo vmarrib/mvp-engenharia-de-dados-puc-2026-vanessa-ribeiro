@@ -410,29 +410,113 @@ def sql_txt(t):
 for t, doc in DOC_TABELA.items():
     spark.sql(f"COMMENT ON TABLE {GOLD}.{t} IS '{sql_txt(doc)}'")
 
-DOC_COLUNA = {
- ("dim_regra", "id_regra"): "Chave natural da regra. Dominio: R01 a R18.",
- ("dim_regra", "severidade"): "Dominio: Critico, Alto, Medio, Baixo.",
- ("dim_regra", "peso"): "Peso da severidade. Dominio: 10, 6, 3, 1.",
- ("dim_regra", "categoria_owasp"): "Categoria do OWASP Top 10:2025. Dominio: A01, A02, A03, A06, A08.",
- ("dim_regra", "escopo_saude"): "True nas regras R15 a R18, especificas de dado de saude.",
- ("dim_regra", "esperado_por_design"): "True em R08 e R16. O Supabase concede privilegio amplo a anon e authenticated por padrao e delega a protecao ao RLS; esses achados descrevem a arquitetura da plataforma, nao um defeito introduzido pela aplicacao.",
- ("fato_achado", "score_ajustado"): "Score desconsiderando os achados esperados por design (R08, R16). Separa risco introduzido pela aplicacao de caracteristica da plataforma. Faixa 0 a 30.",
- ("dim_objeto", "exposto_api"): "True quando o schema e exposto via PostgREST. Padrao Supabase: apenas public.",
- ("dim_objeto", "rls_habilitado"): "Estado do Row Level Security. Origem: pg_class.relrowsecurity.",
- ("dim_objeto", "dominio"): "Dominio: aplicacao, gerenciado_supabase.",
- ("dim_coluna", "classe_dado"): "Classe inferida do nome da coluna. Dominio: credencial, saude, saude_metrica, biometrico, documento, prof_saude, financeiro, origem_racial, religiao, email, telefone, endereco, nascimento, nome_pessoa, localizacao, nulo.",
- ("dim_coluna", "is_dado_saude"): "Dado referente a saude, LGPD art. 11. Inclui metrica corporal por decisao interpretativa documentada.",
- ("dim_coluna", "is_dado_sensivel"): "Dado pessoal sensivel, LGPD art. 5, II.",
- ("dim_politica", "libera_tudo"): "True quando a expressao da politica reduz a USING(true).",
- ("dim_politica", "tem_isolamento"): "True quando a expressao referencia auth.uid(), o JWT ou coluna de tenant.",
- ("fato_achado", "score_risco"): "Metrica de risco. Faixa 1 a 30. Calculo: dim_regra.peso x multiplicador do dado (3 sensivel, 2 pessoal, 1 demais).",
- ("fato_achado", "detalhe"): "Descricao do achado gerada pelo motor de regras. Nao contem nome real de objeto.",
- ("backlog_remediacao", "prioridade"): "Ordem sugerida de correcao. 1 = mais urgente.",
- ("mapa_exposicao_lgpd", "pct_exposta"): "Percentual de colunas da classe em tabela exposta sem RLS. Faixa 0 a 100.",
- ("isolamento_prontuario", "aberta_a_autenticados"): "1 quando existe politica para authenticated sem filtro por usuario ou tenant. Faixa: 0 ou 1.",
+# Documentar 20 colunas a mao e deixar 100 sem descricao nao atende o enunciado, que pede
+# "nome e descricao do que cada campo representa". Separo em dois dicionarios: COMUM para
+# colunas que aparecem em varias tabelas com o mesmo sentido, ESPECIFICO para as que mudam
+# de significado conforme a tabela. No fim o loop varre TODAS as colunas e imprime o que
+# ficou sem documentacao - o catalogo se audita em vez de eu confiar na minha contagem.
+
+COMUM = {
+ "sk_objeto": "Chave substituta de dim_objeto.",
+ "sk_coluna": "Chave substituta de dim_coluna. Nula quando o achado nao e por coluna.",
+ "sk_regra": "Chave substituta de dim_regra.",
+ "sk_role": "Chave substituta de dim_role. Nula quando o achado nao e por role.",
+ "sk_tempo": "Chave substituta de dim_tempo.",
+ "sk_politica": "Chave substituta de dim_politica.",
+ "schema_anon": "Schema anonimizado. Dominio: app_s1..app_sN para a aplicacao, nome real para os schemas gerenciados pelo Supabase.",
+ "objeto_anon": "Objeto anonimizado. Formato t_NNN, estavel entre execucoes.",
+ "coluna_anon": "Coluna anonimizada. Formato c_ + 8 digitos hexadecimais do SHA-256 de schema|objeto|coluna.",
+ "schema_nome": "Nome real do schema. Campo tecnico de join, nao publicado no relatorio.",
+ "objeto": "Nome real do objeto. Campo tecnico de join, nao publicado no relatorio.",
+ "coluna": "Nome real da coluna. Campo tecnico de join, nao publicado no relatorio.",
+ "tipo_objeto": "Tipo do objeto no Postgres. Dominio: tabela, tabela_particionada, view, view_materializada, tabela_estrangeira, outro.",
+ "dominio": "Origem do objeto. Dominio: aplicacao, gerenciado_supabase. Separa o que a autora construiu do que a plataforma mantem.",
+ "rls_habilitado": "Estado do Row Level Security. Origem: pg_class.relrowsecurity. Dominio: true, false.",
+ "severidade": "Nivel de gravidade da regra. Dominio: Critico, Alto, Medio, Baixo.",
+ "categoria_owasp": "Categoria do OWASP Top 10:2025. Dominio: A01:2025, A02:2025, A03:2025, A06:2025, A08:2025.",
+ "escopo_saude": "True nas regras R15 a R18, especificas de dado referente a saude.",
+ "esperado_por_design": "True em R08 e R16. O Supabase concede privilegio amplo a anon e authenticated por padrao e delega a protecao ao RLS; esses achados descrevem a arquitetura da plataforma, nao defeito da aplicacao.",
+ "id_regra": "Identificador da regra de auditoria. Dominio: R01 a R18. Chave natural.",
+ "role_nome": "Nome da role no Postgres. Dominio observado: anon, authenticated, public, service_role, postgres, supabase_admin e outras.",
+ "classe_dado": "Classe de dado pessoal inferida. Dominio: credencial, saude_clinica, saude_metrica, biometrico, documento, prof_saude, financeiro, email, telefone, endereco, nascimento, nome_pessoa, localizacao, nulo.",
+ "is_dado_saude": "Dado referente a saude, LGPD art. 11. Inclui metrica corporal por decisao interpretativa documentada no README.",
+ "is_dado_sensivel": "Dado pessoal sensivel, LGPD art. 5, II.",
+ "is_dado_pessoal": "Dado pessoal, LGPD art. 5, I. True quando classe_dado nao e nula.",
+ "envolve_dado_pessoal": "True quando o achado atinge coluna classificada como dado pessoal.",
+ "envolve_dado_saude": "True quando o achado atinge coluna de dado referente a saude.",
+ "envolve_dado_sensivel": "True quando o achado atinge dado pessoal sensivel. E o que aciona o multiplicador 3 no score.",
+ "score_risco": "Metrica de risco. Faixa 1 a 30. Calculo: dim_regra.peso x multiplicador do dado (3 sensivel, 2 pessoal, 1 demais).",
+ "score_ajustado": "Score desconsiderando os achados esperados por design (R08, R16). Separa risco introduzido pela aplicacao de caracteristica da plataforma. Faixa 0 a 30.",
+ "detalhe": "Descricao textual do achado, gerada pelo motor de regras. Nao contem nome real de objeto.",
+ "n_colunas_saude": "Quantidade de colunas de dado de saude na tabela. Faixa observada: 1 a 21.",
+ "n_politicas": "Quantidade de politicas de RLS definidas sobre o objeto.",
+ "n_com_isolamento": "Quantidade de politicas que referenciam auth.uid(), o JWT ou coluna de tenant.",
 }
-for (t, c), doc in DOC_COLUNA.items():
-    spark.sql(f"ALTER TABLE {GOLD}.{t} ALTER COLUMN {c} COMMENT '{sql_txt(doc)}'")
+
+ESPECIFICO = {
+ ("dim_regra", "descricao"): "Enunciado da regra de auditoria, em linguagem de negocio.",
+ ("dim_regra", "peso"): "Peso numerico da severidade. Dominio: 10 (Critico), 6 (Alto), 3 (Medio), 1 (Baixo).",
+ ("dim_regra", "referencia"): "Nome completo da categoria OWASP correspondente, para citacao no relatorio.",
+ ("dim_regra", "sk_regra"): "Chave substituta da regra.",
+ ("dim_objeto", "exposto_api"): "True quando o schema e exposto via PostgREST. No Pitaia: public e graphql_public.",
+ ("dim_objeto", "rls_forcado"): "True quando o RLS tambem se aplica ao owner da tabela (FORCE ROW LEVEL SECURITY). Origem: pg_class.relforcerowsecurity.",
+ ("dim_objeto", "security_invoker"): "True quando a view declara security_invoker=true e portanto respeita o RLS de quem consulta, e nao de quem a criou.",
+ ("dim_objeto", "tem_documentacao"): "True quando o objeto possui COMMENT no catalogo de origem do Postgres.",
+ ("dim_coluna", "tipo_dado"): "Tipo do dado no Postgres, como retornado por format_type. Exemplos: text, uuid, timestamptz, numeric, jsonb.",
+ ("dim_coluna", "nullable"): "True quando a coluna aceita nulo. Derivado de pg_attribute.attnotnull.",
+ ("dim_role", "tipo_role"): "Agrupamento da role por nivel de privilegio. Dominio: anonima, autenticada, privilegiada, outra.",
+ ("dim_tempo", "data_snapshot"): "Data da coleta do catalogo de seguranca. Granularidade da dimensao.",
+ ("dim_tempo", "ano"): "Ano do snapshot. Derivado de data_snapshot.",
+ ("dim_tempo", "mes"): "Mes do snapshot. Dominio: 1 a 12.",
+ ("dim_tempo", "dia_semana"): "Dia da semana do snapshot, por extenso em ingles.",
+ ("dim_politica", "politica"): "Nome da politica de RLS no Postgres.",
+ ("dim_politica", "comando"): "Comando SQL coberto pela politica. Dominio: ALL, SELECT, INSERT, UPDATE, DELETE.",
+ ("dim_politica", "permissiva"): "True para politica PERMISSIVE (somam-se por OR), false para RESTRICTIVE (somam-se por AND).",
+ ("dim_politica", "so_check"): "True quando a politica define apenas WITH CHECK, sem USING. Nesse caso expressao_using vem nula na origem.",
+ ("dim_politica", "libera_tudo"): "True quando a expressao da politica reduz a USING(true), concedendo acesso irrestrito.",
+ ("dim_politica", "filtra_uid"): "True quando a expressao referencia auth.uid(), amarrando a linha ao usuario autenticado.",
+ ("dim_politica", "filtra_jwt"): "True quando a expressao referencia auth.jwt() ou auth.role().",
+ ("dim_politica", "filtra_tenant"): "True quando a expressao referencia coluna de tenant, paciente ou profissional.",
+ ("dim_politica", "tem_isolamento"): "True quando qualquer uma das tres flags de filtro e verdadeira. E a medida de isolamento entre usuarios.",
+ ("fato_achado", "sk_achado"): "Chave substituta do achado. Granularidade da fato: uma regra violada por um objeto, num snapshot.",
+ ("fato_achado", "_processado_em"): "Timestamp da execucao do motor de regras. Metadado de controle.",
+ ("backlog_remediacao", "prioridade"): "Ordem sugerida de correcao. 1 = mais urgente. Derivada de score_ajustado e score_risco decrescentes.",
+ ("backlog_remediacao", "regra"): "Enunciado da regra violada, copiado de dim_regra.descricao para leitura direta.",
+ ("postura_por_schema", "n_objetos"): "Quantidade de objetos distintos no schema.",
+ ("postura_por_schema", "n_achados"): "Quantidade de achados no schema.",
+ ("postura_por_schema", "score_total"): "Soma do score_risco dos achados do schema.",
+ ("postura_por_schema", "score_ajustado"): "Soma do score_ajustado. Compare com score_total para ver quanto do risco e caracteristica da plataforma.",
+ ("postura_por_schema", "score_por_objeto"): "score_total dividido pelo numero de objetos. Normaliza pelo tamanho do schema, sem o que o schema maior sempre parece o pior.",
+ ("postura_por_schema", "n_criticos"): "Quantidade de achados de severidade Critica no schema.",
+ ("postura_por_schema", "n_achados_saude"): "Quantidade de achados das regras R15 a R18, especificas de dado de saude.",
+ ("mapa_exposicao_lgpd", "n_colunas"): "Total de colunas daquela classe de dado nos schemas da aplicacao.",
+ ("mapa_exposicao_lgpd", "n_protegidas"): "Colunas da classe que estao em tabela com RLS habilitado.",
+ ("mapa_exposicao_lgpd", "n_expostas"): "Colunas da classe em tabela exposta via API e sem RLS. Medida direta de exposicao regulatoria.",
+ ("mapa_exposicao_lgpd", "pct_exposta"): "Percentual de colunas da classe expostas sem RLS. Faixa 0 a 100.",
+ ("isolamento_prontuario", "aberta_a_autenticados"): "1 quando existe politica para authenticated sem filtro por usuario ou tenant, ou seja, qualquer conta logada alcanca o dado de qualquer paciente. Dominio: 0, 1.",
+}
+
+def sql_txt(t):
+    """Aspa simples no texto quebra o literal SQL. Dobrar e o escape."""
+    return t.replace("'", "''")
+
+for t, doc in DOC_TABELA.items():
+    spark.sql(f"COMMENT ON TABLE {GOLD}.{t} IS '{sql_txt(doc)}'")
+
+documentadas, sem_doc = 0, []
+for t in DOC_TABELA:
+    for c in spark.table(f"{GOLD}.{t}").columns:
+        doc = ESPECIFICO.get((t, c)) or COMUM.get(c)
+        if doc:
+            spark.sql(f"ALTER TABLE {GOLD}.{t} ALTER COLUMN {c} COMMENT '{sql_txt(doc)}'")
+            documentadas += 1
+        else:
+            sem_doc.append(f"{t}.{c}")
+
+total = documentadas + len(sem_doc)
+print(f"Catalogo: {documentadas}/{total} colunas documentadas "
+      f"({100*documentadas/total:.0f}%)")
+if sem_doc:
+    print("Sem descricao:", ", ".join(sem_doc))
 
 print("Catalogo aplicado. Screenshot do Catalog Explorer e da aba Lineage.")
